@@ -102,7 +102,7 @@
 <div class="fetch-options">
   <strong>検索対象:</strong>
   <label>
-    最新 <input type="number" id="fetchCount" value="5" min="1"> 件
+    最新 <input type="number" id="fetchCount" value="15" min="1"> 件
   </label>
   <label>
     <input type="checkbox" id="fetchAllDocs"> 全て取得
@@ -203,12 +203,13 @@
       const threadContent = threadParts[i + 1];
       if (!threadId || !threadContent) continue;
       
+      // =?=?= で分割して、最初の2つは無視（タイムスタンプなど）、3つ目以降がスレッドデータ
       const contentParts = threadContent.split('=?=?=');
       let cleanThreadContent = (contentParts.length >= 3) ? contentParts.slice(2).join('=?=?=').trim() : threadContent.trim();
       if (!cleanThreadContent) continue;
       
-      const postPattern = /(?=(?:名無しさん＠おーぷん|[▼▲★☆■]))/;
-      let postStrings = cleanThreadContent.split(postPattern).filter(s => s.trim());
+      // 改行で分割してレスを判断（<br>は改行として扱わない）
+      const postStrings = cleanThreadContent.split('\n').filter(s => s.trim());
       if (postStrings.length === 0) continue;
 
       const posts = [];
@@ -216,7 +217,13 @@
       let lastPostTime = null;
 
       postStrings.forEach((postStr, index) => {
-        const postParts = postStr.split('<>');
+        const trimmedPost = postStr.trim();
+        if (!trimmedPost) return;
+        
+        // 名無しさん＠おーぷんで始まるかどうかをチェック
+        if (!trimmedPost.startsWith('名無しさん＠おーぷん')) return;
+        
+        const postParts = trimmedPost.split('<>');
         if (postParts.length < 3) return;
 
         const author = postParts[0].trim();
@@ -235,28 +242,18 @@
           return;
         }
 
+        // 1レス目の最後の<>からスレッドタイトルを取得
         if (index === 0 && postContent) {
-          let extractedTitle = '';
-          const contentTitleParts = postContent.split('<>');
-          if (contentTitleParts.length > 1) {
-            let candidateTitle = contentTitleParts[contentTitleParts.length - 1].trim();
-            const ninjaPostStartIndex = candidateTitle.search(/[▼▲★☆■]/);
-            if (ninjaPostStartIndex !== -1) {
-                candidateTitle = candidateTitle.substring(0, ninjaPostStartIndex).trim();
-            }
-            candidateTitle = candidateTitle.replace(/<[^>]+>/g, '').trim().replace(/^[^>]*>/, '').trim();
+          const contentParts = postContent.split('<>');
+          if (contentParts.length > 1) {
+            // 最後の部分がタイトル
+            let candidateTitle = contentParts[contentParts.length - 1].trim();
             if (candidateTitle && candidateTitle.length >= 3) {
-              extractedTitle = candidateTitle;
-              postContent = contentTitleParts.slice(0, -1).join('<>').trim();
+              threadTitle = candidateTitle;
+              // タイトル部分を除いた内容を投稿内容とする
+              postContent = contentParts.slice(0, -1).join('<>').trim();
             }
           }
-          if (!extractedTitle && postContent) {
-            const firstLine = postContent.split('\n')[0].trim().replace(/<[^>]+>/g, '').trim();
-            if (firstLine.length >= 3 && firstLine.length <= 50 && !firstLine.match(/^https?:\/\//)) {
-              extractedTitle = firstLine;
-            }
-          }
-          if (extractedTitle) threadTitle = extractedTitle;
         }
         
         const idMatch = dateTimeAndId.match(/(\d{2}\/\d{2}\/\d{2}\([^)]+\) \d{2}:\d{2}:\d{2}) ID:\s*(\S+)/);
@@ -266,9 +263,9 @@
           if (parsedTime) lastPostTime = parsedTime;
           
           posts.push({
-            postNumber: index + 1, author: author, sage: emailOrSage === 'sage',
+            postNumber: posts.length + 1, author: author, sage: emailOrSage === 'sage',
             postTime: postTime, postTimeDate: parsedTime, userId: idMatch[2],
-            content: postContent.replace(/<br>/g, '\n').trim()
+            content: postContent // <br>はここでは変換しない、表示時に変換
           });
         }
       });
@@ -421,7 +418,11 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\  async function initializeSystem() {
+    const infoDiv = document.getElementById('info');
+    try {
+      infoDiv.innerHTML = '<div class="loading">システムを初期化中...</div>';
+      const metaDocRef =');
     const regex = new RegExp(`(${escapedTerm})`, 'g');
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
@@ -497,9 +498,11 @@
             const highlightedAuthor = highlightSearchTerm(post.author, keyword);
             const highlightedUserId = highlightSearchTerm(post.userId, keyword);
             const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
+            // <br>を改行に変換して表示
+            const displayContent = postContent.replace(/<br>/g, '\n');
             postDiv.innerHTML = `
                 <div class="post-meta"><strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
-                <div class="post-content">${postContent}</div>
+                <div class="post-content">${displayContent}</div>
             `;
             detailsDiv.appendChild(postDiv);
         });
