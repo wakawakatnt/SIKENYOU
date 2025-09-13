@@ -232,20 +232,19 @@
       let posts = [];
       let threadTitle = "（タイトル不明）";
       let lastPostTime = null;
-      let currentPost = null;
       let postNumber = 0;
 
       for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
         const line = lines[lineIndex].trim();
         if (!line) continue;
 
-        // 「名無しさん＠おーぷん<>」で始まる行は新しいレスの開始
-        if (line.startsWith('名無しさん＠おーぷん<>')) {
-          // 前のレスを保存
-          if (currentPost) {
-            posts.push(currentPost);
-          }
+        // レスの開始条件をより厳密に判定
+        // 1. 「名無しさん＠おーぷん<>」で始まる場合
+        // 2. または「名無し」で始まり「<>」を含む場合
+        const isPostStart = line.startsWith('名無しさん＠おーぷん<>') || 
+                           (line.startsWith('名無し') && line.includes('<>') && line.includes('ID:'));
 
+        if (isPostStart) {
           postNumber++;
           const parts = line.split('<>');
           if (parts.length < 3) continue;
@@ -255,7 +254,7 @@
           let dateTimeAndId = '';
           let postBodyContent = '';
           
-          // パターン判定
+          // パターン判定: 名前<>sage<>日時 ID<>内容 または 名前<><>日時 ID<>内容
           if (parts.length >= 4 && parts[2].match(/\d{2}\/\d{2}\/\d{2}/)) {
             emailOrSage = parts[1] || '';
             dateTimeAndId = parts[2];
@@ -264,14 +263,34 @@
             dateTimeAndId = parts[1];
             postBodyContent = parts.slice(2).join('<>');
           } else {
-            continue;
+            // 日時がない場合の処理（IDのみのパターン）
+            for (let j = 1; j < parts.length; j++) {
+              if (parts[j].includes('ID:')) {
+                dateTimeAndId = parts[j];
+                postBodyContent = parts.slice(j + 1).join('<>');
+                break;
+              }
+            }
           }
 
           // 日時とIDを分離
-          const dateIdMatch = dateTimeAndId.match(/^(.+?)\s+ID:\s*(\S+)$/);
-          if (!dateIdMatch) continue;
+          let postTime = '';
+          let userId = '';
+          
+          if (dateTimeAndId.includes('ID:')) {
+            const dateIdMatch = dateTimeAndId.match(/^(.+?)\s+ID:\s*(\S+)$/);
+            if (dateIdMatch) {
+              [, postTime, userId] = dateIdMatch;
+            } else {
+              // ID:のみの場合
+              const idMatch = dateTimeAndId.match(/ID:\s*(\S+)/);
+              if (idMatch) {
+                userId = idMatch[1];
+                postTime = '不明';
+              }
+            }
+          }
 
-          const [, postTime, userId] = dateIdMatch;
           const parsedTime = parseDateTime(postTime);
           if (parsedTime) lastPostTime = parsedTime;
 
@@ -280,10 +299,13 @@
             const bodyParts = postBodyContent.split('<>');
             let titleCandidate = '';
             
-            // 最後の有効なパートを探す
+            // 最後の有効なパートを探す（URLやIDを除く）
             for (let j = bodyParts.length - 1; j >= 0; j--) {
               const part = bodyParts[j].trim();
-              if (part && part.length >= 3 && !part.startsWith('http') && !part.includes('ID:')) {
+              if (part && part.length >= 3 && 
+                  !part.startsWith('http') && 
+                  !part.includes('ID:') && 
+                  !part.match(/^\d+$/)) {
                 titleCandidate = part;
                 break;
               }
@@ -299,24 +321,16 @@
             }
           }
           
-          currentPost = {
+          posts.push({
             postNumber: postNumber,
             author: author,
             sage: emailOrSage === 'sage',
-            postTime: postTime,
+            postTime: postTime || '不明',
             postTimeDate: parsedTime,
-            userId: userId,
+            userId: userId || '不明',
             content: postBodyContent.replace(/<br>/g, '\n').trim()
-          };
-        } else if (currentPost) {
-          // 継続行の場合、現在のレスの内容に追加
-          currentPost.content += '\n' + line.replace(/<br>/g, '\n');
+          });
         }
-      }
-      
-      // 最後のレスを保存
-      if (currentPost) {
-        posts.push(currentPost);
       }
       
       if (posts.length > 0) {
