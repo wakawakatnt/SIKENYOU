@@ -107,7 +107,7 @@
   <label>
     <input type="checkbox" id="fetchAllDocs"> 全て取得
   </label>
-  <button id="refreshBtn" title="キャッシュをクリアして再取得します">リフレッシュ</button>
+  <button id="refreshBtn" title="キャッシュをクリアして再取得・再検索します">リフレッシュ</button>
 </div>
 
 <div class="search-options-wrapper">
@@ -651,16 +651,43 @@
   // イベントリスナーの設定
   document.getElementById('searchBtn').addEventListener('click', searchPosts);
   document.getElementById('clearBtn').addEventListener('click', clearSearch);
-  document.getElementById('refreshBtn').addEventListener('click', resetFetchState);
   document.getElementById('docsBtn').addEventListener('click', toggleDocumentsList);
   document.getElementById('shareBtn').addEventListener('click', shareUrl);
+  
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    resetFetchState();
+    // キーワードがあれば再検索も実行
+    if (document.getElementById('searchInput').value.trim()) {
+      searchPosts();
+    }
+  });
+
   document.getElementById('fetchAllDocs').addEventListener('change', (e) => {
     document.getElementById('fetchCount').disabled = e.target.checked;
+    // フェッチ範囲が変わったのでキャッシュをリセット
+    resetFetchState();
   });
+  
   document.getElementById('searchInput').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); searchPosts(); }
   });
-  document.querySelectorAll('input[name="sortOrder"]').forEach(radio => radio.addEventListener('change', applySorting));
+  
+  // ソートオプションの変更イベントリスナー
+  document.querySelectorAll('input[name="sortOrder"]').forEach(radio => {
+    radio.addEventListener('change', applySorting);
+  });
+
+  // 検索範囲の変更イベントリスナー
+  document.querySelectorAll('input[name="searchType"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      // 検索ボックスにキーワードがあれば自動で再検索
+      if (document.getElementById('searchInput').value.trim()) {
+        searchPosts();
+      }
+    });
+  });
+
+  // ブラウザバック/フォワード対応
   window.addEventListener('popstate', checkUrlParams);
   
   // 初期化
