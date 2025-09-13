@@ -656,7 +656,6 @@
   
   document.getElementById('refreshBtn').addEventListener('click', () => {
     resetFetchState();
-    // キーワードがあれば再検索も実行
     if (document.getElementById('searchInput').value.trim()) {
       searchPosts();
     }
@@ -664,30 +663,28 @@
 
   document.getElementById('fetchAllDocs').addEventListener('change', (e) => {
     document.getElementById('fetchCount').disabled = e.target.checked;
-    // フェッチ範囲が変わったのでキャッシュをリセット
     resetFetchState();
+    if (document.getElementById('searchInput').value.trim()) {
+      searchPosts();
+    }
   });
   
   document.getElementById('searchInput').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); searchPosts(); }
   });
   
-  // ソートオプションの変更イベントリスナー
   document.querySelectorAll('input[name="sortOrder"]').forEach(radio => {
     radio.addEventListener('change', applySorting);
   });
 
-  // 検索範囲の変更イベントリスナー
   document.querySelectorAll('input[name="searchType"]').forEach(radio => {
     radio.addEventListener('change', () => {
-      // 検索ボックスにキーワードがあれば自動で再検索
       if (document.getElementById('searchInput').value.trim()) {
         searchPosts();
       }
     });
   });
 
-  // ブラウザバック/フォワード対応
   window.addEventListener('popstate', checkUrlParams);
   
   // 初期化
