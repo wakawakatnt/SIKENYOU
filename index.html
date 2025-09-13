@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf--8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ONJ 掲示板データ検索</title>
 <style>
   body { font-family: system-ui,-apple-system,Segoe UI,Roboto,'Hiragino Kaku Gothic ProN',Meiryo,Arial; margin: 18px; line-height: 1.5; background-color: #f4f4f9; color: #333; }
-  input[type="text"] { padding: 10px; width: 70%; margin-right: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
+  input { padding: 10px; width: 70%; margin-right: 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 1em; }
   button { padding: 10px 18px; border: none; border-radius: 6px; background-color: #1976d2; color: white; cursor: pointer; font-size: 1em; }
   button:hover { background-color: #1565c0; }
   #clearBtn { background-color: #757575; }
@@ -21,9 +21,9 @@
   .info { background: #e3f2fd; padding: 12px; margin-bottom: 20px; border-radius: 6px; border-left: 5px solid #1976d2; }
 
   /* 読み込みオプション */
-  .load-options { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 15px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-  .load-options input[type="number"] { width: 80px; padding: 5px; }
-  .load-options label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+  .load-options-wrapper { margin-bottom: 20px; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .load-options-wrapper select { padding: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.95em; }
+  #loadInfo { font-size: 0.9em; color: #555; }
 
   /* 検索オプション */
   .search-options-wrapper { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
@@ -42,7 +42,8 @@
   .document-info { display: flex; gap: 15px; font-size: 0.9em; color: #666; }
   .document-size { font-weight: bold; }
   .document-stats { font-size: 0.8em; }
-  
+  .active-document { background: #e8f5e8; }
+
   /* スレッド検索結果のスタイル */
   .thread-result { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
   .thread-header { padding: 15px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background-color 0.2s; gap: 15px; }
@@ -79,8 +80,8 @@
 
   /* レスポンシブ対応 */
   @media (max-width: 768px) {
-    .controls, .load-options { flex-direction: column; align-items: stretch; gap: 10px; }
-    input[type="text"] { width: 100%; margin-right: 0; margin-bottom: 10px; }
+    .controls { flex-direction: column; align-items: stretch; }
+    input { width: 100%; margin-right: 0; margin-bottom: 10px; }
     .document-item { flex-direction: column; align-items: flex-start; gap: 8px; }
     .document-info { flex-direction: column; gap: 5px; }
     .search-type-options label, .sort-options label { display: block; margin-bottom: 8px; }
@@ -94,19 +95,14 @@
   <input type="text" id="searchInput" placeholder="検索ワード（名前、ID、投稿内容）">
   <button id="searchBtn">検索</button>
   <button id="clearBtn">クリア</button>
-  <button id="resetBtn">データ再更新</button>
+  <button id="resetBtn">データ再読込</button>
   <button id="docsBtn">ドキュメント一覧</button>
   <button id="shareBtn">URL共有</button>
 </div>
 
-<div id="loadOptions" class="load-options">
-  <strong>データ読み込み設定:</strong>
-  <label>
-    最新 <input type="number" id="loadCount" value="10" min="1"> 件を読み込む
-  </label>
-  <label>
-    <input type="checkbox" id="loadAll"> 全て読み込む
-  </label>
+<div class="load-options-wrapper">
+  <strong>読み込み範囲:</strong>
+  <select id="loadCountSelect"></select>
 </div>
 
 <div class="search-options-wrapper">
@@ -114,8 +110,9 @@
     <strong>検索範囲:</strong>
     <label><input type="radio" name="searchType" value="all" checked> 全て</label>
     <label><input type="radio" name="searchType" value="title"> スレタイのみ</label>
-    <label><input type="radio" name="searchType" value="body"> 本文のみ (名前, ID, 投稿内容)</label>
+    <label><input type="radio" name="searchType" value="body"> 本文のみ</label>
   </div>
+
   <div id="sortOptions" class="sort-options">
     <strong>結果の並び順:</strong>
     <label><input type="radio" name="sortOrder" value="newest" checked> 最新順</label>
@@ -127,19 +124,19 @@
 
 <div id="documentsList" class="documents-list">
   <div class="documents-header">
-    <span>読み込み済みドキュメント一覧</span>
+    <span>利用可能なドキュメント一覧</span>
     <span id="documentsCount"></span>
   </div>
   <div id="documentsContent"></div>
 </div>
 
-<div id="info" class="info">ここにデータ情報や検索結果が表示されます。</div>
+<div id="info" class="info">システムを初期化しています...</div>
 <div id="searchSummary" class="search-summary" style="display: none;"></div>
 <div id="results"></div>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
   
   const firebaseConfig = {
     apiKey: "AIzaSyA2Z-JByRuaSv88nAj356nOh4CNgQb0_SY",
@@ -155,21 +152,13 @@
   const db = getFirestore(app);
 
   // --- グローバル変数 ---
+  let isDataLoaded = false;
+  let totalDocumentCount = 0;
   let allDocuments = [];
   let allDocumentThreads = new Map();
   let currentSearchResults = [];
-  let totalDocumentsInMeta = 0;
-  let isDataLoaded = false;
 
-  // --- 既存のヘルパー関数 (変更なし) ---
-  function formatBytes(bytes) { /* ... (元のコードと同じ) ... */ }
-  function parseDateTime(dateTimeStr) { /* ... (元のコードと同じ) ... */ }
-  function parseContentData(content) { /* ... (元のコードと同じ) ... */ }
-  function highlightSearchTerm(text, term) { /* ... (元のコードと同じ) ... */ }
-  function sortSearchResults(results, sortOrder) { /* ... (元のコードと同じ) ... */ }
-  function searchInThreads(threads, keyword, documentName = null, searchType = 'all') { /* ... (元のコードと同じ) ... */ }
-  
-  // (元のコードをここにペースト)
+  // ### ここから下の関数群は変更ありません ###
   function formatBytes(bytes) {
     if (!bytes || bytes === 0) return '0 B';
     const k = 1024;
@@ -219,7 +208,6 @@
         let postContent = '';
         
         if (postParts.length >= 4 && postParts[2].match(/\d{2}\/\d{2}\/\d{2}/)) {
-          emailOrSage = postParts[1] || '';
           dateTimeAndId = postParts[2];
           postContent = postParts.slice(3).join('<>');
         } else if (postParts.length >= 3 && postParts[1].match(/\d{2}\/\d{2}\/\d{2}/)) {
@@ -245,7 +233,7 @@
             }
           }
           if (!extractedTitle && postContent) {
-            const firstLine = postContent.split('\n')[0].trim().replace(/<[^>]+>/g, '').trim();
+            const firstLine = postContent.split('\n')[0].trim().replace(/<[^>]+>/g, '');
             if (firstLine.length >= 3 && firstLine.length <= 50 && !firstLine.match(/^https?:\/\//)) {
               extractedTitle = firstLine;
             }
@@ -276,6 +264,132 @@
       }
     }
     return threads;
+  }
+  // ### ここまで変更なし ###
+
+  async function initializeAppAndFetchMeta() {
+    try {
+      const metaDocRef = doc(db, "meta", "document_count");
+      const metaDocSnap = await getDoc(metaDocRef);
+      if (metaDocSnap.exists()) {
+        totalDocumentCount = metaDocSnap.data().totalDocuments;
+        setupLoadOptions(totalDocumentCount);
+        updateInfoPanel();
+      } else {
+        document.getElementById('info').textContent = 'エラー: meta/document_countドキュメントが見つかりません。';
+      }
+    } catch (err) {
+      document.getElementById('info').textContent = `初期化エラー: ${err.message}`;
+      console.error(err);
+    }
+    checkUrlParams();
+  }
+
+  function setupLoadOptions(total) {
+    const select = document.getElementById('loadCountSelect');
+    select.innerHTML = '';
+    const options = [5, 10];
+    options.forEach(num => {
+      if (num < total) {
+        const option = document.createElement('option');
+        option.value = num;
+        option.textContent = `最新${num}件のドキュメント`;
+        select.appendChild(option);
+      }
+    });
+    const allOption = document.createElement('option');
+    allOption.value = 'all';
+    allOption.textContent = `すべて (${total}件) のドキュメント`;
+    select.appendChild(allOption);
+    select.value = 'all';
+  }
+
+  async function loadDocuments() {
+    const loadCountValue = document.getElementById('loadCountSelect').value;
+    document.getElementById('results').innerHTML = '<div class="loading">ドキュメントを読み込み中...</div>';
+    
+    let docIdsToLoad = [];
+    const numCount = parseInt(loadCountValue);
+
+    if (loadCountValue === 'all' || numCount >= totalDocumentCount) {
+      for (let i = 1; i <= totalDocumentCount; i++) {
+        docIdsToLoad.push(i.toString());
+      }
+    } else {
+      const start = totalDocumentCount - numCount + 1;
+      for (let i = start; i <= totalDocumentCount; i++) {
+        if (i > 0) docIdsToLoad.push(i.toString());
+      }
+    }
+    
+    const promises = docIdsToLoad.map(id => getDoc(doc(db, "aggregated_threads", id)));
+    const docSnapshots = await Promise.all(promises);
+
+    allDocuments = [];
+    allDocumentThreads.clear();
+    
+    for (const docSnapshot of docSnapshots) {
+        if (!docSnapshot.exists()) continue;
+
+        const data = docSnapshot.data();
+        const contentSize = data.content ? new Blob([data.content]).size : 0;
+        const lastUpdated = data.lastUpdated ? new Date(data.lastUpdated.seconds * 1000).toLocaleString('ja-JP') : '不明';
+        
+        const threads = parseContentData(data.content || '');
+        allDocumentThreads.set(docSnapshot.id, threads);
+        
+        const threadCount = threads.length;
+        const postCount = threads.reduce((sum, t) => sum + t.posts.length, 0);
+        
+        allDocuments.push({
+          id: docSnapshot.id, name: docSnapshot.id, size: contentSize, lastUpdated: lastUpdated,
+          threadCount: threadCount, postCount: postCount, data: data
+        });
+    }
+
+    allDocuments.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
+    renderDocumentsList();
+    updateInfoPanel();
+    isDataLoaded = true;
+    document.getElementById('loadCountSelect').disabled = true;
+  }
+
+  function renderDocumentsList() {
+    const documentsContent = document.getElementById('documentsContent');
+    const documentsCount = document.getElementById('documentsCount');
+    documentsCount.textContent = `${allDocuments.length}件のドキュメント`;
+    documentsContent.innerHTML = '';
+    allDocuments.forEach(doc => {
+      const docDiv = document.createElement('div');
+      docDiv.className = 'document-item';
+      docDiv.innerHTML = `
+        <div class="document-name">${doc.name}</div>
+        <div class="document-info">
+          <span class="document-size">${formatBytes(doc.size)}</span>
+          <span class="document-stats">スレッド: ${doc.threadCount}件, 投稿: ${doc.postCount}件</span>
+          <span>更新: ${doc.lastUpdated}</span>
+        </div>`;
+      documentsContent.appendChild(docDiv);
+    });
+  }
+
+  function toggleDocumentsList() {
+    const docsList = document.getElementById('documentsList');
+    docsList.style.display = (docsList.style.display === 'none' || docsList.style.display === '') ? 'block' : 'none';
+  }
+
+  function updateInfoPanel() {
+    const infoDiv = document.getElementById('info');
+    if (isDataLoaded) {
+        const totalThreads = Array.from(allDocumentThreads.values()).reduce((sum, threads) => sum + threads.length, 0);
+        const totalPosts = Array.from(allDocumentThreads.values()).reduce((sum, threads) => sum + threads.reduce((s, t) => s + t.posts.length, 0), 0);
+        infoDiv.innerHTML = `
+          <strong>検索対象:</strong> ${allDocuments.length}件のドキュメントを読み込み済み | 
+          <strong>総スレッド数:</strong> ${totalThreads} | 
+          <strong>総投稿数:</strong> ${totalPosts}`;
+    } else {
+        infoDiv.innerHTML = `<strong>全${totalDocumentCount}件</strong>のドキュメントが利用可能です。読み込む範囲を選択して検索してください。`;
+    }
   }
 
   function highlightSearchTerm(text, term) {
@@ -308,180 +422,10 @@
     return sortedResults;
   }
 
-  function searchInThreads(threads, keyword, documentName = null, searchType = 'all') {
-    const lowerKeyword = keyword.toLowerCase();
-    const searchResults = [];
-    const idSearchMatch = searchType !== 'title' ? keyword.match(/^id:\s*(.*)/i) : null;
-
-    if (idSearchMatch) {
-        const targetId = idSearchMatch[1].trim().replace(/\s/g, '');
-        if (targetId) {
-            threads.forEach(thread => {
-                const matchedPosts = thread.posts.filter(post => post.userId && (targetId.length < 4 ? post.userId.startsWith(targetId) : post.userId.includes(targetId)));
-                if (matchedPosts.length > 0) { searchResults.push({ ...thread, matchedPosts, documentName }); }
-            });
-        }
-    } else {
-        const keywordForIdSearch = lowerKeyword.replace(/\s/g, '');
-        threads.forEach(thread => {
-            let postsMatchingKeyword = [];
-            let titleMatches = false;
-
-            if (searchType === 'body' || searchType === 'all') {
-                postsMatchingKeyword = thread.posts.filter(post => 
-                    (post.author && post.author.toLowerCase().includes(lowerKeyword)) ||
-                    (post.userId && post.userId.toLowerCase().includes(keywordForIdSearch)) ||
-                    (post.content && post.content.toLowerCase().includes(lowerKeyword))
-                );
-            }
-            if (searchType === 'title' || searchType === 'all') {
-                titleMatches = thread.title.toLowerCase().includes(lowerKeyword);
-            }
-            if (postsMatchingKeyword.length > 0 || titleMatches) {
-                let finalMatchedPosts = [...postsMatchingKeyword];
-                if (titleMatches && thread.posts.length > 0) {
-                    const firstPost = thread.posts[0];
-                    if (!finalMatchedPosts.some(p => p.postNumber === firstPost.postNumber)) {
-                        finalMatchedPosts.unshift(firstPost);
-                    }
-                }
-                if (finalMatchedPosts.length > 0) {
-                    searchResults.push({ ...thread, matchedPosts: finalMatchedPosts, documentName });
-                }
-            }
-        });
-    }
-    return searchResults;
-  }
-
-  // --- 新しい・改良された関数 ---
-
-  async function fetchMetadata() {
-    try {
-      const metaDocRef = doc(db, "meta", "document_count");
-      const docSnap = await getDoc(metaDocRef);
-      if (docSnap.exists()) {
-        totalDocumentsInMeta = docSnap.data().totalDocuments || 0;
-        document.getElementById('loadCount').max = totalDocumentsInMeta;
-      } else {
-        totalDocumentsInMeta = 0;
-        document.getElementById('info').textContent = 'エラー: 総ドキュメント数のメタデータを読み込めませんでした。';
-      }
-    } catch (err) {
-      totalDocumentsInMeta = 0;
-      document.getElementById('info').textContent = `エラー: ${err.message}`;
-      console.error(err);
-    }
-    updateInfoPanel();
-  }
-
-  async function loadDocuments() {
-    const loadCountInput = document.getElementById('loadCount');
-    const loadAllCheckbox = document.getElementById('loadAll');
-    let countToLoad = parseInt(loadCountInput.value, 10);
-    const loadAll = loadAllCheckbox.checked;
-
-    if (!loadAll && (isNaN(countToLoad) || countToLoad <= 0)) {
-      alert('読み込む件数を正しく入力してください。');
-      return false;
-    }
-    if (totalDocumentsInMeta === 0) {
-      alert('総ドキュメント数が不明なため、読み込みを開始できません。');
-      return false;
-    }
-
-    document.getElementById('info').innerHTML = '<div class="loading">ドキュメントデータを読み込み中...</div>';
-    document.getElementById('results').innerHTML = '';
-
-    try {
-      const docIdsToFetch = [];
-      if (loadAll) {
-        for (let i = 1; i <= totalDocumentsInMeta; i++) {
-          docIdsToFetch.push(i.toString());
-        }
-      } else {
-        countToLoad = Math.min(countToLoad, totalDocumentsInMeta);
-        const start = Math.max(1, totalDocumentsInMeta - countToLoad + 1);
-        for (let i = totalDocumentsInMeta; i >= start; i--) {
-          docIdsToFetch.push(i.toString());
-        }
-      }
-
-      const docRefs = docIdsToFetch.map(id => doc(db, "aggregated_threads", id));
-      const docSnapshots = await Promise.all(docRefs.map(ref => getDoc(ref)));
-
-      allDocuments = [];
-      allDocumentThreads.clear();
-
-      for (const docSnapshot of docSnapshots) {
-        if (docSnapshot.exists()) {
-          const data = docSnapshot.data();
-          const contentSize = data.content ? new Blob([data.content]).size : 0;
-          const lastUpdated = data.lastUpdated ? new Date(data.lastUpdated.seconds * 1000).toLocaleString('ja-JP') : '不明';
-          const threads = parseContentData(data.content || '');
-          allDocumentThreads.set(docSnapshot.id, threads);
-          const threadCount = threads.length;
-          const postCount = threads.reduce((sum, t) => sum + t.posts.length, 0);
-          
-          allDocuments.push({
-            id: docSnapshot.id, name: docSnapshot.id, size: contentSize,
-            lastUpdated: lastUpdated, threadCount: threadCount, postCount: postCount,
-          });
-        }
-      }
-      
-      allDocuments.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
-      isDataLoaded = true;
-      document.getElementById('loadOptions').style.display = 'none'; // 読み込み後は設定を隠す
-      renderDocumentsList();
-      updateInfoPanel();
-      return true;
-
-    } catch (err) {
-      document.getElementById('info').textContent = `データ読み込みエラー: ${err.message}`;
-      console.error(err);
-      isDataLoaded = false;
-      return false;
-    }
-  }
-
-  async function searchPosts() {
-    const keyword = document.getElementById('searchInput').value.trim();
-    if (!keyword) {
-      clearSearch(false); // データをリセットせずにUIのみクリア
-      return;
-    }
-
-    if (!isDataLoaded) {
-      const success = await loadDocuments();
-      if (!success) return; // 読み込みに失敗したら中断
-    }
-
-    document.getElementById('results').innerHTML = '<div class="loading">読み込み済みデータを検索中...</div>';
-    
-    setTimeout(() => {
-      let searchResults = [];
-      const searchType = document.querySelector('input[name="searchType"]:checked').value;
-      
-      allDocumentThreads.forEach((threads, docId) => {
-        const docResults = searchInThreads(threads, keyword, docId, searchType);
-        searchResults.push(...docResults);
-      });
-
-      currentSearchResults = searchResults;
-      const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
-      const sortedResults = sortSearchResults(searchResults, sortOrder);
-
-      renderSearchResults(sortedResults, keyword);
-      updateUrlParams(keyword);
-    }, 100);
-  }
-
   function renderSearchResults(results, keyword) {
     const resultsDiv = document.getElementById('results');
     const summaryDiv = document.getElementById('searchSummary');
     const sortOptionsDiv = document.getElementById('sortOptions');
-    
     resultsDiv.innerHTML = '';
 
     if (results.length === 0) {
@@ -493,12 +437,10 @@
 
     sortOptionsDiv.style.display = 'block';
     const totalMatches = results.reduce((sum, r) => sum + r.matchedPosts.length, 0);
-    
     summaryDiv.innerHTML = `
       <strong>検索結果:</strong> "${keyword}" | 
       <strong>対象:</strong> ${allDocuments.length}ドキュメント | 
-      <strong>ヒット:</strong> ${results.length}スレッド, ${totalMatches}投稿
-    `;
+      <strong>ヒット:</strong> ${results.length}スレッド, ${totalMatches}投稿`;
     summaryDiv.style.display = 'block';
 
     results.forEach(thread => {
@@ -515,8 +457,7 @@
             <div class="thread-stats">
                 <span class="total-posts">全${thread.posts.length}レス</span>
                 <span class="match-count">${thread.matchedPosts.length}件ヒット</span>
-            </div>
-        `;
+            </div>`;
         
         const detailsDiv = document.createElement('div');
         detailsDiv.className = 'thread-details';
@@ -525,116 +466,146 @@
         thread.matchedPosts.forEach(post => {
             const postDiv = document.createElement('div');
             postDiv.className = 'post';
-            const postContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || post.author.toLowerCase().includes(keyword.toLowerCase()) || post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
-              ? highlightSearchTerm(post.content, keyword) : post.content;
+            const postContent = highlightSearchTerm(post.content, keyword);
             const highlightedAuthor = highlightSearchTerm(post.author, keyword);
             const highlightedUserId = highlightSearchTerm(post.userId, keyword);
             const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
-            
             postDiv.innerHTML = `
                 <div class="post-meta"><strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
                 <div class="post-content">${postContent}</div>`;
             detailsDiv.appendChild(postDiv);
         });
 
-        headerDiv.addEventListener('click', () => { detailsDiv.style.display = detailsDiv.style.display === 'none' ? 'block' : 'none'; });
+        headerDiv.addEventListener('click', () => {
+            detailsDiv.style.display = (detailsDiv.style.display === 'none' || detailsDiv.style.display === '') ? 'block' : 'none';
+        });
+
         threadDiv.appendChild(headerDiv);
         threadDiv.appendChild(detailsDiv);
         resultsDiv.appendChild(threadDiv);
     });
   }
 
-  function renderDocumentsList() {
-    const documentsContent = document.getElementById('documentsContent');
-    const documentsCount = document.getElementById('documentsCount');
-    documentsCount.textContent = `${allDocuments.length}件のドキュメント`;
-    documentsContent.innerHTML = '';
-    
-    allDocuments.forEach(doc => {
-      const docDiv = document.createElement('div');
-      docDiv.className = 'document-item';
-      docDiv.innerHTML = `
-        <div class="document-name">${doc.name}</div>
-        <div class="document-info">
-          <span class="document-size">${formatBytes(doc.size)}</span>
-          <span class="document-stats">スレッド: ${doc.threadCount}件, 投稿: ${doc.postCount}件</span>
-          <span>更新: ${doc.lastUpdated}</span>
-        </div>`;
-      documentsContent.appendChild(docDiv);
-    });
+  function searchInThreads(threads, keyword, documentName, searchType) {
+    const lowerKeyword = keyword.toLowerCase();
+    const searchResults = [];
+    const idSearchMatch = searchType !== 'title' ? keyword.match(/^id:\s*(.*)/i) : null;
+
+    if (idSearchMatch) {
+        const targetId = idSearchMatch[1].trim().replace(/\s/g, '');
+        if (targetId) {
+            threads.forEach(thread => {
+                const matchedPosts = thread.posts.filter(post => post.userId && (targetId.length < 4 ? post.userId.startsWith(targetId) : post.userId.includes(targetId)));
+                if (matchedPosts.length > 0) {
+                    searchResults.push({ ...thread, matchedPosts, documentName });
+                }
+            });
+        }
+    } else {
+        const keywordForIdSearch = lowerKeyword.replace(/\s/g, '');
+        threads.forEach(thread => {
+            let postsMatchingKeyword = [];
+            let titleMatches = false;
+
+            if (searchType !== 'title') {
+                postsMatchingKeyword = thread.posts.filter(post => 
+                    (post.author && post.author.toLowerCase().includes(lowerKeyword)) ||
+                    (post.userId && post.userId.toLowerCase().includes(keywordForIdSearch)) ||
+                    (post.content && post.content.toLowerCase().includes(lowerKeyword))
+                );
+            }
+            if (searchType !== 'body') {
+                titleMatches = thread.title.toLowerCase().includes(lowerKeyword);
+            }
+
+            if (postsMatchingKeyword.length > 0 || titleMatches) {
+                let finalMatchedPosts = [...postsMatchingKeyword];
+                if (titleMatches && thread.posts.length > 0) {
+                    const firstPost = thread.posts[0];
+                    if (!finalMatchedPosts.some(p => p.postNumber === firstPost.postNumber)) {
+                        finalMatchedPosts.unshift(firstPost);
+                    }
+                }
+                if (finalMatchedPosts.length > 0) {
+                    searchResults.push({ ...thread, matchedPosts: finalMatchedPosts, documentName });
+                }
+            }
+        });
+    }
+    return searchResults;
   }
   
-  function updateInfoPanel() {
-    const infoDiv = document.getElementById('info');
-    if (isDataLoaded) {
-      const totalThreads = Array.from(allDocumentThreads.values()).reduce((sum, threads) => sum + threads.length, 0);
-      const totalPosts = Array.from(allDocumentThreads.values()).reduce((sum, threads) => sum + threads.reduce((s, t) => s + t.posts.length, 0), 0);
-      infoDiv.innerHTML = `
-        <strong>検索対象:</strong> 読み込み済みドキュメント (${allDocuments.length}件) | 
-        <strong>総スレッド数:</strong> ${totalThreads} | 
-        <strong>総投稿数:</strong> ${totalPosts}`;
-    } else {
-      infoDiv.innerHTML = `<strong>総ドキュメント数:</strong> ${totalDocumentsInMeta}件。検索キーワードを入力し、検索ボタンを押してデータの読み込みを開始してください。`;
+  async function searchPosts() {
+    const keyword = document.getElementById('searchInput').value.trim();
+    if (!keyword) {
+      clearSearch();
+      return;
     }
-  }
 
-  function clearSearch(fullReset = true) {
-    document.getElementById('searchInput').value = '';
-    document.getElementById('results').innerHTML = '';
-    document.getElementById('searchSummary').style.display = 'none';
-    document.getElementById('sortOptions').style.display = 'none';
-    currentSearchResults = [];
-    if (fullReset) {
-      updateInfoPanel();
+    if (!isDataLoaded) {
+      await loadDocuments();
     }
-    updateUrlParams('');
-  }
+    
+    document.getElementById('results').innerHTML = '<div class="loading">検索中...</div>';
+    
+    setTimeout(() => {
+      let searchResults = [];
+      const searchType = document.querySelector('input[name="searchType"]:checked').value;
+      
+      allDocumentThreads.forEach((threads, docId) => {
+        const docResults = searchInThreads(threads, keyword, docId, searchType);
+        searchResults.push(...docResults);
+      });
 
-  function resetData() {
-    isDataLoaded = false;
-    allDocuments = [];
-    allDocumentThreads.clear();
-    currentSearchResults = [];
-    document.getElementById('loadOptions').style.display = 'flex';
-    document.getElementById('documentsList').style.display = 'none';
-    clearSearch(true);
-    document.getElementById('info').innerHTML = '<div class="loading">メタデータを再取得中...</div>';
-    fetchMetadata();
+      currentSearchResults = searchResults;
+      applySorting();
+      updateUrlParams(keyword);
+    }, 50);
   }
 
   function applySorting() {
-    if (currentSearchResults.length === 0) return;
+    if (currentSearchResults.length === 0 && !document.getElementById('searchInput').value.trim()) return;
     const keyword = document.getElementById('searchInput').value.trim();
     const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
     const sortedResults = sortSearchResults(currentSearchResults, sortOrder);
     renderSearchResults(sortedResults, keyword);
   }
-
-  function toggleDocumentsList() {
-    const docsList = document.getElementById('documentsList');
-    if (!isDataLoaded) {
-      alert('まずデータを読み込んでください。');
-      return;
-    }
-    docsList.style.display = docsList.style.display === 'none' ? 'block' : 'none';
+  
+  function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('results').innerHTML = '';
+    document.getElementById('searchSummary').style.display = 'none';
+    document.getElementById('sortOptions').style.display = 'none';
+    currentSearchResults = [];
+    updateUrlParams('');
+  }
+  
+  function resetData() {
+    isDataLoaded = false;
+    allDocuments = [];
+    allDocumentThreads.clear();
+    clearSearch();
+    renderDocumentsList();
+    document.getElementById('loadCountSelect').disabled = false;
+    updateInfoPanel();
+    alert('データキャッシュをリセットしました。次回の検索時に再度データを読み込みます。');
   }
 
-  function updateUrlParams(keyword) { /* ... (元のコードと同じ) ... */ }
-  function checkUrlParams() { /* ... (元のコードと同じ) ... */ }
-  function shareUrl() { /* ... (元のコードと同じ) ... */ }
-
-  // (元のコードをここにペースト)
   function updateUrlParams(keyword) {
     const url = new URL(window.location);
-    if (keyword) { url.searchParams.set('search', keyword); } else { url.searchParams.delete('search'); }
+    if (keyword) {
+      url.searchParams.set('search', keyword);
+    } else {
+      url.searchParams.delete('search');
+    }
     window.history.pushState({}, '', url);
   }
 
   function checkUrlParams() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const searchParam = urlParams.get('search');
+    const searchParam = new URLSearchParams(window.location.search).get('search');
     if (searchParam) {
       document.getElementById('searchInput').value = searchParam;
+      document.getElementById('loadCountSelect').value = 'all'; // URLからの検索は全件対象
       searchPosts();
     }
   }
@@ -644,8 +615,13 @@
     const originalText = shareButton.textContent;
     const keyword = document.getElementById('searchInput').value.trim();
     const url = new URL(window.location);
-    if (keyword) { url.searchParams.set('search', keyword); } else { url.searchParams.delete('search'); }
+    if (keyword) {
+      url.searchParams.set('search', keyword);
+    } else {
+      url.searchParams.delete('search');
+    }
     const shareUrl = url.toString();
+
     navigator.clipboard.writeText(shareUrl).then(() => {
       shareButton.textContent = 'コピー完了';
       setTimeout(() => { shareButton.textContent = originalText; }, 2000);
@@ -653,33 +629,23 @@
       prompt('以下のURLをコピーしてください:', shareUrl);
     });
   }
-
-  // --- イベントリスナー設定 ---
+  
+  // --- イベントリスナー ---
   document.getElementById('searchBtn').addEventListener('click', searchPosts);
-  document.getElementById('clearBtn').addEventListener('click', () => clearSearch(false));
+  document.getElementById('clearBtn').addEventListener('click', clearSearch);
   document.getElementById('resetBtn').addEventListener('click', resetData);
   document.getElementById('docsBtn').addEventListener('click', toggleDocumentsList);
   document.getElementById('shareBtn').addEventListener('click', shareUrl);
-  document.getElementById('searchInput').addEventListener('keypress', e => { if (e.key === 'Enter') { e.preventDefault(); searchPosts(); }});
-  document.querySelectorAll('input[name="sortOrder"]').forEach(radio => radio.addEventListener('change', applySorting));
-  
-  const loadCountInput = document.getElementById('loadCount');
-  const loadAllCheckbox = document.getElementById('loadAll');
-  loadAllCheckbox.addEventListener('change', () => {
-    loadCountInput.disabled = loadAllCheckbox.checked;
+  document.getElementById('searchInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); searchPosts(); }
   });
-  loadCountInput.addEventListener('input', () => {
-    if (loadAllCheckbox.checked) {
-      loadAllCheckbox.checked = false;
-      loadCountInput.disabled = false;
-    }
+  document.querySelectorAll('input[name="sortOrder"]').forEach(radio => {
+    radio.addEventListener('change', applySorting);
   });
-
   window.addEventListener('popstate', checkUrlParams);
   
-  // --- 初期化処理 ---
-  fetchMetadata();
-
+  // --- 初期化処理の実行 ---
+  initializeAppAndFetchMeta();
 </script>
 </body>
 </html>
