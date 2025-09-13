@@ -216,13 +216,25 @@
       let cleanThreadContent = (contentParts.length >= 3) ? contentParts.slice(2).join('=?=?=').trim() : threadContent.trim();
       if (!cleanThreadContent) continue;
       
-      // レスの境界を特定するため、「名無しさん＠おーぷん」で分割
-      const postPattern = /(?=名無しさん＠おーぷん<>)/;
-      let postStrings = cleanThreadContent.split(postPattern).filter(s => s.trim());
-      if (postStrings.length === 0) continue;
-
-      const posts = [];
+      // 1レス目の処理（スレタイ抽出）
       let threadTitle = "（タイトル不明）";
+      let firstPostProcessed = false;
+      
+      // 最初に1レス目を処理してスレタイを抽出
+      const firstPostMatch = cleanThreadContent.match(/^([^<>]*?)<>([^<>]*?)<>([^<>]*?)<>([^<>]*?)<>(.*)$/s);
+      if (firstPostMatch) {
+        const [, , , , , remainder] = firstPostMatch;
+        const titleMatch = remainder.match(/<>([^<>]+)(?:\s*<>|\s*$)/);
+        if (titleMatch) {
+          threadTitle = titleMatch[1].trim();
+        }
+      }
+      
+      // レスの境界を特定：日時パターン（25/09/13形式）とIDパターンでレスを分割
+      const postPattern = /(?=(?:[^<>]*<>){2,3}(?:25\/\d{2}\/\d{2}|\d{2}\/\d{2}\/\d{2})\([^)]+\)\s+\d{2}:\d{2}:\d{2}\s+ID:[^<>]+)/;
+      let postStrings = cleanThreadContent.split(postPattern).filter(s => s.trim());
+      
+      const posts = [];
       let lastPostTime = null;
 
       postStrings.forEach((postStr, index) => {
@@ -233,22 +245,34 @@
         const postParts = trimmedPost.split('<>');
         if (postParts.length < 3) return;
 
-        const author = postParts[0].trim();
+        let author = '';
         let emailOrSage = '';
         let dateTimeAndId = '';
         let postContent = '';
         
-        // パターン1: 名前<>sage<>日時 ID<>内容<>...
-        // パターン2: 名前<><>日時 ID<>内容<>...
-        if (postParts.length >= 4 && postParts[2].match(/\d{2}\/\d{2}\/\d{2}/)) {
-          emailOrSage = postParts[1] || '';
-          dateTimeAndId = postParts[2];
-          postContent = postParts.slice(3).join('<>');
-        } else if (postParts.length >= 3 && postParts[1].match(/\d{2}\/\d{2}\/\d{2}/)) {
-          dateTimeAndId = postParts[1];
-          postContent = postParts.slice(2).join('<>');
-        } else {
-          return;
+        // 投稿者名を取得（最初の部分）
+        author = postParts[0].trim();
+        
+        // 日時とIDを含む部分を探す
+        let dateTimeIndex = -1;
+        for (let j = 1; j < postParts.length; j++) {
+          if (postParts[j].match(/(?:25\/\d{2}\/\d{2}|\d{2}\/\d{2}\/\d{2})\([^)]+\)\s+\d{2}:\d{2}:\d{2}\s+ID:/)) {
+            dateTimeIndex = j;
+            dateTimeAndId = postParts[j];
+            break;
+          }
+        }
+        
+        if (dateTimeIndex === -1) return; // 日時が見つからない場合はスキップ
+        
+        // sageの判定
+        if (dateTimeIndex === 2 && postParts[1] === 'sage') {
+          emailOrSage = 'sage';
+        }
+        
+        // 投稿内容を取得（日時の後の部分）
+        if (dateTimeIndex < postParts.length - 1) {
+          postContent = postParts.slice(dateTimeIndex + 1).join('<>');
         }
 
         // 日時とIDを分離
@@ -259,20 +283,23 @@
         const parsedTime = parseDateTime(postTime);
         if (parsedTime) lastPostTime = parsedTime;
 
-        // 1レス目の場合、最後の<>の後がスレッドタイトル
-        if (index === 0 && postContent) {
+        // 1レス目の場合で、まだスレタイが抽出されていない場合
+        if (index === 0 && threadTitle === "（タイトル不明）" && postContent) {
+          // 最後の<>区切りの部分がスレタイの可能性が高い
           const contentParts = postContent.split('<>');
-          if (contentParts.length > 1) {
-            const lastPart = contentParts[contentParts.length - 1].trim();
-            if (lastPart && lastPart.length >= 3) {
-              threadTitle = lastPart;
-              postContent = contentParts.slice(0, -1).join('<>').trim();
+          for (let k = contentParts.length - 1; k >= 0; k--) {
+            const candidate = contentParts[k].trim();
+            if (candidate && candidate.length >= 3 && !candidate.match(/^https?:\/\//) && !candidate.match(/^\d+$/)) {
+              threadTitle = candidate;
+              // スレタイ部分を除去
+              postContent = contentParts.slice(0, k).join('<>').trim();
+              break;
             }
           }
         }
         
         posts.push({
-          postNumber: index + 1,
+          postNumber: posts.length + 1, // 実際のレス番号
           author: author,
           sage: emailOrSage === 'sage',
           postTime: postTime,
