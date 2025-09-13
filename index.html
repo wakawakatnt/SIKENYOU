@@ -216,24 +216,41 @@
       let cleanThreadContent = (contentParts.length >= 3) ? contentParts.slice(2).join('=?=?=').trim() : threadContent.trim();
       if (!cleanThreadContent) continue;
       
-      // 改行でレスを分割（<br>は改行として扱わない）
-      const lines = cleanThreadContent.split('\n').filter(line => line.trim());
-      if (lines.length === 0) continue;
+      // レスの境界を特定するため、「名無しさん＠おーぷん」で分割
+      const postPattern = /(?=名無しさん＠おーぷん<>)/;
+      let postStrings = cleanThreadContent.split(postPattern).filter(s => s.trim());
+      if (postStrings.length === 0) continue;
 
       const posts = [];
       let threadTitle = "（タイトル不明）";
       let lastPostTime = null;
 
-      lines.forEach((line, index) => {
-        const trimmedLine = line.trim();
-        if (!trimmedLine) return;
+      postStrings.forEach((postStr, index) => {
+        const trimmedPost = postStr.trim();
+        if (!trimmedPost) return;
 
-        // レスの形式をチェック：名無しさん＠おーぷん<><>日時 ID:xxx<> 内容 <>
-        const postMatch = trimmedLine.match(/^([^<>]+)<>([^<>]*)<>([^<>]+)<>([^<>]*)<?>(.*)$/);
-        if (!postMatch) return;
+        // レスの各部分を<>で分割
+        const postParts = trimmedPost.split('<>');
+        if (postParts.length < 3) return;
 
-        const [, author, sage, dateTimeAndId, content1, content2] = postMatch;
+        const author = postParts[0].trim();
+        let emailOrSage = '';
+        let dateTimeAndId = '';
+        let postContent = '';
         
+        // パターン1: 名前<>sage<>日時 ID<>内容<>...
+        // パターン2: 名前<><>日時 ID<>内容<>...
+        if (postParts.length >= 4 && postParts[2].match(/\d{2}\/\d{2}\/\d{2}/)) {
+          emailOrSage = postParts[1] || '';
+          dateTimeAndId = postParts[2];
+          postContent = postParts.slice(3).join('<>');
+        } else if (postParts.length >= 3 && postParts[1].match(/\d{2}\/\d{2}\/\d{2}/)) {
+          dateTimeAndId = postParts[1];
+          postContent = postParts.slice(2).join('<>');
+        } else {
+          return;
+        }
+
         // 日時とIDを分離
         const dateIdMatch = dateTimeAndId.match(/^(.+?)\s+ID:\s*(\S+)$/);
         if (!dateIdMatch) return;
@@ -242,22 +259,22 @@
         const parsedTime = parseDateTime(postTime);
         if (parsedTime) lastPostTime = parsedTime;
 
-        // 投稿内容を結合
-        let postContent = content1 + (content2 ? '<>' + content2 : '');
-        
         // 1レス目の場合、最後の<>の後がスレッドタイトル
-        if (index === 0) {
-          const titleMatch = postContent.match(/^(.*?)<>([^<>]*)$/);
-          if (titleMatch && titleMatch[2]) {
-            threadTitle = titleMatch[2].trim() || threadTitle;
-            postContent = titleMatch[1] || '';
+        if (index === 0 && postContent) {
+          const contentParts = postContent.split('<>');
+          if (contentParts.length > 1) {
+            const lastPart = contentParts[contentParts.length - 1].trim();
+            if (lastPart && lastPart.length >= 3) {
+              threadTitle = lastPart;
+              postContent = contentParts.slice(0, -1).join('<>').trim();
+            }
           }
         }
         
         posts.push({
           postNumber: index + 1,
-          author: author.trim(),
-          sage: sage === 'sage',
+          author: author,
+          sage: emailOrSage === 'sage',
           postTime: postTime,
           postTimeDate: parsedTime,
           userId: userId,
