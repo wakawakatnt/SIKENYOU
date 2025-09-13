@@ -63,18 +63,29 @@
   
   /* レス取得ボタン */
   .post-control-buttons { display: flex; gap: 10px; flex-wrap: wrap; }
-  .post-control-buttons button { padding: 8px 16px; font-size: 0.9em; background-color: #28a745; }
+  .post-control-buttons button { padding: 6px 12px; font-size: 0.85em; background-color: #28a745; }
   .post-control-buttons button:hover { background-color: #218838; }
   .post-control-buttons button.active { background-color: #ffc107; color: #212529; }
   .post-control-buttons button.active:hover { background-color: #e0a800; }
   
+  /* 個別レスのボタン */
+  .post-buttons { display: inline-flex; gap: 5px; margin-left: 10px; }
+  .post-buttons button { padding: 3px 8px; font-size: 0.75em; background-color: #6c757d; }
+  .post-buttons button:hover { background-color: #5a6268; }
+  
   /* レスのスタイル */
-  .post { border-top: 1px dashed #ccc; padding: 12px 0; }
+  .post { border-top: 1px dashed #ccc; padding: 12px 0; position: relative; }
   .post:first-child { border-top: none; }
   .post-meta { font-size: 0.9em; color: #555; margin-bottom: 8px; }
   .post-meta strong { color: #008000; }
   .post-content { white-space: pre-wrap; line-height: 1.6; background: #fafafa; padding: 10px; border-radius: 4px; word-wrap: break-word; }
   .highlight { background-color: #ffeb3b; padding: 1px 2px; border-radius: 2px; }
+  
+  /* 安価プレビュー */
+  .anchor-link { color: #1976d2; text-decoration: underline; cursor: pointer; }
+  .anchor-preview { position: absolute; background: #fff; border: 2px solid #1976d2; border-radius: 6px; padding: 10px; max-width: 400px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 0.9em; }
+  .anchor-preview .preview-meta { font-weight: bold; color: #008000; margin-bottom: 5px; }
+  .anchor-preview .preview-content { white-space: pre-wrap; line-height: 1.4; }
 
   /* 検索結果サマリー */
   .search-summary { background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin-bottom: 20px; }
@@ -216,94 +227,97 @@
       let cleanThreadContent = (contentParts.length >= 3) ? contentParts.slice(2).join('=?=?=').trim() : threadContent.trim();
       if (!cleanThreadContent) continue;
       
-      // レスの境界を特定するため、行で分割してから「名無しさん＠おーぷん<>」の行を見つける
+      // 行で分割
       const lines = cleanThreadContent.split('\n');
-      const postStartIndices = [];
-      
-      lines.forEach((line, index) => {
-        if (line.trim().startsWith('名無しさん＠おーぷん<>')) {
-          postStartIndices.push(index);
-        }
-      });
-
-      if (postStartIndices.length === 0) continue;
-
-      const posts = [];
+      let posts = [];
       let threadTitle = "（タイトル不明）";
       let lastPostTime = null;
+      let currentPost = null;
+      let postNumber = 0;
 
-      postStartIndices.forEach((startIndex, postIndex) => {
-        const endIndex = (postIndex + 1 < postStartIndices.length) ? postStartIndices[postIndex + 1] : lines.length;
-        const postLines = lines.slice(startIndex, endIndex);
-        const postContent = postLines.join('\n').trim();
-        
-        if (!postContent) return;
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const line = lines[lineIndex].trim();
+        if (!line) continue;
 
-        // レスの各部分を<>で分割
-        const postParts = postContent.split('<>');
-        if (postParts.length < 3) return;
+        // 「名無しさん＠おーぷん<>」で始まる行は新しいレスの開始
+        if (line.startsWith('名無しさん＠おーぷん<>')) {
+          // 前のレスを保存
+          if (currentPost) {
+            posts.push(currentPost);
+          }
 
-        const author = postParts[0].trim();
-        let emailOrSage = '';
-        let dateTimeAndId = '';
-        let postBodyContent = '';
-        
-        // パターン1: 名前<>sage<>日時 ID<>内容<>...
-        // パターン2: 名前<><>日時 ID<>内容<>...
-        if (postParts.length >= 4 && postParts[2].match(/\d{2}\/\d{2}\/\d{2}/)) {
-          emailOrSage = postParts[1] || '';
-          dateTimeAndId = postParts[2];
-          postBodyContent = postParts.slice(3).join('<>');
-        } else if (postParts.length >= 3 && postParts[1].match(/\d{2}\/\d{2}\/\d{2}/)) {
-          dateTimeAndId = postParts[1];
-          postBodyContent = postParts.slice(2).join('<>');
-        } else {
-          return;
-        }
+          postNumber++;
+          const parts = line.split('<>');
+          if (parts.length < 3) continue;
 
-        // 日時とIDを分離
-        const dateIdMatch = dateTimeAndId.match(/^(.+?)\s+ID:\s*(\S+)$/);
-        if (!dateIdMatch) return;
-
-        const [, postTime, userId] = dateIdMatch;
-        const parsedTime = parseDateTime(postTime);
-        if (parsedTime) lastPostTime = parsedTime;
-
-        // 1レス目の場合、スレッドタイトルを探す
-        if (postIndex === 0 && postBodyContent) {
-          // 最後の<>の後にある文字列をスレタイとして扱う
-          const bodyParts = postBodyContent.split('<>');
+          const author = parts[0].trim();
+          let emailOrSage = '';
+          let dateTimeAndId = '';
+          let postBodyContent = '';
           
-          // 空でない最後のパートを探す
-          let titleCandidate = '';
-          for (let j = bodyParts.length - 1; j >= 0; j--) {
-            const part = bodyParts[j].trim();
-            if (part && part.length >= 3) {
-              titleCandidate = part;
-              break;
+          // パターン判定
+          if (parts.length >= 4 && parts[2].match(/\d{2}\/\d{2}\/\d{2}/)) {
+            emailOrSage = parts[1] || '';
+            dateTimeAndId = parts[2];
+            postBodyContent = parts.slice(3).join('<>');
+          } else if (parts.length >= 3 && parts[1].match(/\d{2}\/\d{2}\/\d{2}/)) {
+            dateTimeAndId = parts[1];
+            postBodyContent = parts.slice(2).join('<>');
+          } else {
+            continue;
+          }
+
+          // 日時とIDを分離
+          const dateIdMatch = dateTimeAndId.match(/^(.+?)\s+ID:\s*(\S+)$/);
+          if (!dateIdMatch) continue;
+
+          const [, postTime, userId] = dateIdMatch;
+          const parsedTime = parseDateTime(postTime);
+          if (parsedTime) lastPostTime = parsedTime;
+
+          // 1レス目の場合、スレッドタイトルを抽出
+          if (postNumber === 1 && postBodyContent) {
+            const bodyParts = postBodyContent.split('<>');
+            let titleCandidate = '';
+            
+            // 最後の有効なパートを探す
+            for (let j = bodyParts.length - 1; j >= 0; j--) {
+              const part = bodyParts[j].trim();
+              if (part && part.length >= 3 && !part.startsWith('http') && !part.includes('ID:')) {
+                titleCandidate = part;
+                break;
+              }
+            }
+            
+            if (titleCandidate) {
+              threadTitle = titleCandidate;
+              // タイトル部分を除いた内容を投稿内容とする
+              const titleIndex = postBodyContent.lastIndexOf('<>' + titleCandidate);
+              if (titleIndex !== -1) {
+                postBodyContent = postBodyContent.substring(0, titleIndex).replace(/<>$/, '').trim();
+              }
             }
           }
           
-          if (titleCandidate) {
-            threadTitle = titleCandidate;
-            // スレタイ部分を除いた内容を投稿内容とする
-            const titleIndex = postBodyContent.lastIndexOf('<>' + titleCandidate);
-            if (titleIndex !== -1) {
-              postBodyContent = postBodyContent.substring(0, titleIndex).replace(/<>$/, '').trim();
-            }
-          }
+          currentPost = {
+            postNumber: postNumber,
+            author: author,
+            sage: emailOrSage === 'sage',
+            postTime: postTime,
+            postTimeDate: parsedTime,
+            userId: userId,
+            content: postBodyContent.replace(/<br>/g, '\n').trim()
+          };
+        } else if (currentPost) {
+          // 継続行の場合、現在のレスの内容に追加
+          currentPost.content += '\n' + line.replace(/<br>/g, '\n');
         }
-        
-        posts.push({
-          postNumber: postIndex + 1,
-          author: author,
-          sage: emailOrSage === 'sage',
-          postTime: postTime,
-          postTimeDate: parsedTime,
-          userId: userId,
-          content: postBodyContent.replace(/<br>/g, '\n').trim() // 表示時に<br>を改行に変換
-        });
-      });
+      }
+      
+      // 最後のレスを保存
+      if (currentPost) {
+        posts.push(currentPost);
+      }
       
       if (posts.length > 0) {
         threads.push({
@@ -461,6 +475,30 @@
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
 
+  function processAnchors(content, thread) {
+    return content.replace(/>>\d+/g, (match) => {
+      const postNum = match.substring(2);
+      return `<span class="anchor-link" data-post-num="${postNum}" data-thread-id="${thread.id}">${match}</span>`;
+    });
+  }
+
+  function createAnchorPreview(postNum, threadId) {
+    const threads = Array.from(allDocumentThreads.values()).flat();
+    const thread = threads.find(t => t.id === threadId);
+    if (!thread) return null;
+
+    const targetPost = thread.posts.find(p => p.postNumber === parseInt(postNum));
+    if (!targetPost) return null;
+
+    const previewDiv = document.createElement('div');
+    previewDiv.className = 'anchor-preview';
+    previewDiv.innerHTML = `
+      <div class="preview-meta">${targetPost.postNumber}: ${targetPost.author} | ${targetPost.postTime} | ID:${targetPost.userId}</div>
+      <div class="preview-content">${targetPost.content.substring(0, 200)}${targetPost.content.length > 200 ? '...' : ''}</div>
+    `;
+    return previewDiv;
+  }
+
   function sortSearchResults(results, sortOrder) {
     const sortedResults = [...results];
     switch (sortOrder) {
@@ -480,8 +518,47 @@
     return sortedResults;
   }
 
-  // レス表示範囲の管理
-  function showPostsInRange(thread, startIndex, endIndex, keyword, threadDiv) {
+  // レス範囲表示機能
+  function showPostsInRange(thread, postElement, direction, keyword) {
+    const postNumber = parseInt(postElement.querySelector('.post-meta strong').textContent.split(':')[0]);
+    const startIndex = direction === 'up' ? Math.max(0, postNumber - 101) : postNumber - 1;
+    const endIndex = direction === 'up' ? postNumber - 1 : Math.min(thread.posts.length, postNumber + 99);
+    
+    const postsToShow = thread.posts.slice(startIndex, endIndex);
+    const container = document.createElement('div');
+    container.className = 'range-posts';
+    
+    postsToShow.forEach(post => {
+      const postDiv = document.createElement('div');
+      postDiv.className = 'post';
+      
+      const postContent = processAnchors(post.content, thread);
+      const highlightedContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || 
+                        post.author.toLowerCase().includes(keyword.toLowerCase()) || 
+                        post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
+        ? highlightSearchTerm(postContent, keyword) : postContent;
+      const highlightedAuthor = highlightSearchTerm(post.author, keyword);
+      const highlightedUserId = highlightSearchTerm(post.userId, keyword);
+      const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
+      
+      postDiv.innerHTML = `
+        <div class="post-meta"><strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
+        <div class="post-content">${highlightedContent}</div>
+      `;
+      container.appendChild(postDiv);
+    });
+
+    if (direction === 'up') {
+      postElement.parentNode.insertBefore(container, postElement);
+    } else {
+      postElement.parentNode.insertBefore(container, postElement.nextSibling);
+    }
+
+    // 安価プレビューイベントを追加
+    addAnchorPreviewEvents(container);
+  }
+
+  function showAllPosts(thread, keyword, threadDiv) {
     const detailsDiv = threadDiv.querySelector('.thread-details');
     const postsContainer = detailsDiv.querySelector('.posts-container') || (() => {
       const container = document.createElement('div');
@@ -492,46 +569,55 @@
     
     postsContainer.innerHTML = '';
     
-    const actualStart = Math.max(0, startIndex);
-    const actualEnd = Math.min(thread.posts.length, endIndex);
-    
-    for (let i = actualStart; i < actualEnd; i++) {
-      const post = thread.posts[i];
+    thread.posts.forEach(post => {
       const postDiv = document.createElement('div');
       postDiv.className = 'post';
       
-      const postContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || 
-                          post.author.toLowerCase().includes(keyword.toLowerCase()) || 
-                          post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
-        ? highlightSearchTerm(post.content, keyword) : post.content;
+      const postContent = processAnchors(post.content, thread);
+      const highlightedContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || 
+                        post.author.toLowerCase().includes(keyword.toLowerCase()) || 
+                        post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
+        ? highlightSearchTerm(postContent, keyword) : postContent;
       const highlightedAuthor = highlightSearchTerm(post.author, keyword);
       const highlightedUserId = highlightSearchTerm(post.userId, keyword);
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
       postDiv.innerHTML = `
         <div class="post-meta"><strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
-        <div class="post-content">${postContent}</div>
+        <div class="post-content">${highlightedContent}</div>
       `;
       postsContainer.appendChild(postDiv);
-    }
-    
-    // ボタンの状態を更新
-    updatePostControlButtons(threadDiv, actualStart, actualEnd, thread.posts.length);
+    });
+
+    // 安価プレビューイベントを追加
+    addAnchorPreviewEvents(postsContainer);
   }
 
-  function updatePostControlButtons(threadDiv, currentStart, currentEnd, totalPosts) {
-    const buttons = threadDiv.querySelectorAll('.post-control-buttons button');
-    buttons.forEach(btn => btn.classList.remove('active'));
-    
-    if (currentStart === 0 && currentEnd === totalPosts) {
-      threadDiv.querySelector('[data-action="show-all"]')?.classList.add('active');
-    } else if (currentEnd - currentStart === 100) {
-      if (currentStart === 0) {
-        threadDiv.querySelector('[data-action="show-first-100"]')?.classList.add('active');
-      } else {
-        threadDiv.querySelector('[data-action="show-last-100"]')?.classList.add('active');
-      }
-    }
+  function addAnchorPreviewEvents(container) {
+    const anchorLinks = container.querySelectorAll('.anchor-link');
+    anchorLinks.forEach(link => {
+      let previewElement = null;
+      
+      link.addEventListener('mouseenter', (e) => {
+        const postNum = e.target.getAttribute('data-post-num');
+        const threadId = e.target.getAttribute('data-thread-id');
+        previewElement = createAnchorPreview(postNum, threadId);
+        
+        if (previewElement) {
+          document.body.appendChild(previewElement);
+          const rect = e.target.getBoundingClientRect();
+          previewElement.style.left = Math.min(rect.left, window.innerWidth - previewElement.offsetWidth - 10) + 'px';
+          previewElement.style.top = (rect.bottom + 5) + 'px';
+        }
+      });
+      
+      link.addEventListener('mouseleave', () => {
+        if (previewElement) {
+          document.body.removeChild(previewElement);
+          previewElement = null;
+        }
+      });
+    });
   }
 
   function renderSearchResults(results, keyword) {
@@ -579,51 +665,64 @@
         detailsDiv.innerHTML = `
           <div class="thread-meta">
             <a href="${thread.link}" target="_blank" rel="noopener noreferrer">このスレッドへのリンク</a>
-            <div class="post-control-buttons">
-              <button data-action="show-first-100" data-thread-id="${thread.id}">上100レス</button>
-              <button data-action="show-last-100" data-thread-id="${thread.id}">下100レス</button>
-              <button data-action="show-all" data-thread-id="${thread.id}">全レス表示</button>
-            </div>
+            <button class="show-all-posts" data-thread-id="${thread.id}">全レス表示</button>
           </div>
         `;
 
-        // レス取得ボタンのイベントリスナー
-        const controlButtons = detailsDiv.querySelectorAll('.post-control-buttons button');
-        controlButtons.forEach(button => {
-          button.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const action = button.getAttribute('data-action');
-            
-            switch (action) {
-              case 'show-first-100':
-                showPostsInRange(thread, 0, 100, keyword, threadDiv);
-                break;
-              case 'show-last-100':
-                const lastStart = Math.max(0, thread.posts.length - 100);
-                showPostsInRange(thread, lastStart, thread.posts.length, keyword, threadDiv);
-                break;
-              case 'show-all':
-                showPostsInRange(thread, 0, thread.posts.length, keyword, threadDiv);
-                break;
-            }
-          });
+        // 全レス表示ボタンのイベントリスナー
+        const showAllButton = detailsDiv.querySelector('.show-all-posts');
+        showAllButton.addEventListener('click', (e) => {
+          e.stopPropagation();
+          showAllPosts(thread, keyword, threadDiv);
+          showAllButton.style.display = 'none';
         });
 
         // 初期表示：マッチしたレスのみ表示
         thread.matchedPosts.forEach(post => {
             const postDiv = document.createElement('div');
             postDiv.className = 'post';
-            const postContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || post.author.toLowerCase().includes(keyword.toLowerCase()) || post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
-              ? highlightSearchTerm(post.content, keyword) : post.content;
+            
+            const postContent = processAnchors(post.content, thread);
+            const highlightedContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || 
+                          post.author.toLowerCase().includes(keyword.toLowerCase()) || 
+                          post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
+              ? highlightSearchTerm(postContent, keyword) : postContent;
             const highlightedAuthor = highlightSearchTerm(post.author, keyword);
             const highlightedUserId = highlightSearchTerm(post.userId, keyword);
             const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
+            
             postDiv.innerHTML = `
-                <div class="post-meta"><strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
-                <div class="post-content">${postContent}</div>
+                <div class="post-meta">
+                  <strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+                  <div class="post-buttons">
+                    <button class="range-up" data-post-num="${post.postNumber}">上100レス</button>
+                    <button class="range-down" data-post-num="${post.postNumber}">下100レス</button>
+                  </div>
+                </div>
+                <div class="post-content">${highlightedContent}</div>
             `;
+            
+            // 上100レス・下100レスボタンのイベントリスナー
+            const upButton = postDiv.querySelector('.range-up');
+            const downButton = postDiv.querySelector('.range-down');
+            
+            upButton.addEventListener('click', (e) => {
+              e.stopPropagation();
+              showPostsInRange(thread, postDiv, 'up', keyword);
+              upButton.disabled = true;
+            });
+            
+            downButton.addEventListener('click', (e) => {
+              e.stopPropagation();
+              showPostsInRange(thread, postDiv, 'down', keyword);
+              downButton.disabled = true;
+            });
+            
             detailsDiv.appendChild(postDiv);
         });
+
+        // 安価プレビューイベントを追加
+        addAnchorPreviewEvents(detailsDiv);
 
         headerDiv.addEventListener('click', () => { 
           detailsDiv.style.display = (detailsDiv.style.display === 'none' || detailsDiv.style.display === '') ? 'block' : 'none'; 
