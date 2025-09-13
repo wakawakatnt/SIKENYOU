@@ -153,7 +153,8 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
-  import { getFirestore, collection, getDocs, doc, getDoc, query, orderBy, limit, documentId } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+  // where をインポートに追加
+  import { getFirestore, collection, getDocs, doc, getDoc, query, orderBy, limit, documentId, where } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
   
   const firebaseConfig = {
     apiKey: "AIzaSyA2Z-JByRuaSv88nAj356nOh4CNgQb0_SY",
@@ -172,8 +173,8 @@
   let allDocuments = [];
   let allDocumentThreads = new Map();
   let currentSearchResults = [];
-  let isDataLoaded = false; // データ読み込み済みフラグ
-  let totalDocumentCount = 0; // 総ドキュメント数
+  let isDataLoaded = false;
+  let totalDocumentCount = 0;
 
   // --- 共通関数 ---
   function formatBytes(bytes) {
@@ -306,6 +307,7 @@
     }
   }
 
+  // --- ここからが修正された関数です ---
   async function loadDocuments() {
     const infoDiv = document.getElementById('info');
     infoDiv.innerHTML = '<div class="loading">ドキュメントを読み込み中...</div>';
@@ -313,25 +315,45 @@
     try {
       const loadType = document.querySelector('input[name="loadType"]:checked').value;
       const loadCount = parseInt(document.getElementById('loadCountInput').value, 10);
-      
-      let q;
       const threadsCollection = collection(db, "aggregated_threads");
+      let snapshotDocs = []; // 取得したドキュメントを格納する配列
 
-      if (loadType === 'all') {
-        // ドキュメントID（数字）の降順で全て取得
-        q = query(threadsCollection, orderBy(documentId(), "desc"));
-      } else {
-        // ドキュメントID（数字）の降順で指定件数取得
-        q = query(threadsCollection, orderBy(documentId(), "desc"), limit(loadCount));
+      if (loadType === 'latest' && totalDocumentCount > 0) {
+        // [アプローチ1] 総数からIDを計算して取得 (インデックス不要)
+        // ドキュメントIDが '1', '2', '3'... のような連番であると仮定
+        const maxDocId = totalDocumentCount; 
+        const startId = Math.max(1, maxDocId - loadCount + 1);
+        
+        const targetIds = [];
+        for (let i = startId; i <= maxDocId; i++) {
+          targetIds.push(i.toString());
+        }
+
+        // 'in' クエリは最大30個の要素までしか一度に指定できないため、30個ずつに分割して取得
+        if (targetIds.length > 0) {
+            const promises = [];
+            for (let i = 0; i < targetIds.length; i += 30) {
+                const chunk = targetIds.slice(i, i + 30);
+                const q = query(threadsCollection, where(documentId(), 'in', chunk));
+                promises.push(getDocs(q));
+            }
+            const snapshots = await Promise.all(promises);
+            snapshotDocs = snapshots.flatMap(s => s.docs);
+        }
+        
+      } else { // 'all' の場合、または totalDocumentCount が不明な場合
+        // [アプローチ2] 全件を昇順で取得 (インデックス不要)
+        // 注意: この方法はドキュメント数が多いと非効率になる可能性があります。
+        const q = query(threadsCollection, orderBy(documentId(), "asc"));
+        const snapshot = await getDocs(q);
+        snapshotDocs = snapshot.docs;
       }
       
-      const snapshot = await getDocs(q);
-      
-      // リセット
+      // 共通のデータ処理
       allDocuments = [];
       allDocumentThreads.clear();
       
-      for (const docSnapshot of snapshot.docs) {
+      for (const docSnapshot of snapshotDocs) {
         const data = docSnapshot.data();
         const contentSize = data.content ? new Blob([data.content]).size : 0;
         const lastUpdated = data.lastUpdated ? new Date(data.lastUpdated.seconds * 1000).toLocaleString('ja-JP') : '不明';
@@ -348,9 +370,10 @@
         });
       }
       
-      allDocuments.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
-      isDataLoaded = true; // データ読み込み完了
+      // 常にドキュメントIDの降順（新しいものが上）にソートして表示を統一
+      allDocuments.sort((a, b) => b.name.localeCompare(a.name, undefined, {numeric: true}));
       
+      isDataLoaded = true;
       renderDocumentsList();
       updateInfoPanel();
       
@@ -360,6 +383,7 @@
       console.error(err);
     }
   }
+  // --- 関数修正ここまで ---
 
   function handleRefresh() {
     allDocuments = [];
@@ -367,12 +391,10 @@
     currentSearchResults = [];
     isDataLoaded = false;
     
-    // UIをクリア
     document.getElementById('documentsList').style.display = 'none';
     document.getElementById('documentsContent').innerHTML = '';
     clearSearch();
     
-    // メタデータを再取得して情報パネルを更新
     initialize();
   }
 
@@ -448,10 +470,8 @@
       return;
     }
 
-    // データが未読の場合、先に読み込む
     if (!isDataLoaded) {
       await loadDocuments();
-      // 読み込みに失敗した場合はここで終了
       if (!isDataLoaded) return;
     }
 
