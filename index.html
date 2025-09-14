@@ -17,6 +17,8 @@
   #shareBtn:hover { background-color: #f57c00; }
   #refreshBtn { background-color: #f44336; }
   #refreshBtn:hover { background-color: #d32f2f; }
+  #helpBtn { background-color: #9c27b0; }
+  #helpBtn:hover { background-color: #7b1fa2; }
   .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .info { background: #e3f2fd; padding: 12px; margin-bottom: 20px; border-radius: 6px; border-left: 5px solid #1976d2; }
 
@@ -96,6 +98,13 @@
   .loading::after { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid #ddd; border-radius: 50%; border-top-color: #1976d2; animation: spin 1s ease-in-out infinite; margin-left: 10px; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
+  /* 説明パネル */
+  .help-panel { background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; padding: 20px; display: none; }
+  .help-panel h3 { color: #1976d2; margin-top: 0; }
+  .help-panel h4 { color: #333; margin-top: 20px; margin-bottom: 10px; }
+  .help-panel ul { margin-left: 20px; }
+  .help-panel li { margin-bottom: 5px; }
+
   /* レスポンシブ対応 */
   @media (max-width: 768px) {
     .controls { flex-direction: column; align-items: stretch; }
@@ -115,6 +124,7 @@
   <button id="clearBtn">クリア</button>
   <button id="docsBtn">ドキュメント一覧</button>
   <button id="shareBtn">URL共有</button>
+  <button id="helpBtn">説明</button>
 </div>
 
 <div class="fetch-options">
@@ -157,6 +167,43 @@
       <input type="radio" name="sortOrder" value="relevance"> 関連度順
     </label>
   </div>
+</div>
+
+<div id="helpPanel" class="help-panel">
+  <h3>ONJ掲示板データ検索システム - 使い方ガイド</h3>
+  
+  <h4>概要</h4>
+  <p>このシステムはONJ（おんJつまりなんでも実況Jupiter）掲示板のスレッドデータを検索・閲覧できるツールです。スレッドタイトル、投稿者名、ID、投稿内容を対象に検索できます。</p>
+  
+  <h4>基本的な使い方</h4>
+  <ul>
+    <li><strong>検索:</strong> 検索ボックスにキーワードを入力して「検索」ボタンを押すか、Enterキーを押してください</li>
+    <li><strong>ID検索:</strong> 「id:○○○○」の形式で入力すると、特定のIDで投稿されたレスを検索できます</li>
+    <li><strong>検索範囲:</strong> 「全て」「スレタイのみ」「本文のみ」から選択できます</li>
+    <li><strong>並び順:</strong> 「最新順」「古い順」「ドキュメント名順」「関連度順」から選択できます</li>
+  </ul>
+  
+  <h4>検索対象の設定</h4>
+  <ul>
+    <li><strong>最新○件:</strong> 最新のドキュメントから指定した件数を検索対象にします</li>
+    <li><strong>全て取得:</strong> チェックすると、利用可能な全てのドキュメントを検索対象にします</li>
+    <li><strong>リフレッシュ:</strong> キャッシュをクリアして最新データを取得し直します</li>
+  </ul>
+  
+  <h4>検索結果の操作</h4>
+  <ul>
+    <li><strong>スレッド展開:</strong> スレッドタイトルをクリックすると、マッチした投稿が表示されます</li>
+    <li><strong>全レス表示:</strong> 「全レス表示」ボタンでスレッド内の全ての投稿を表示できます</li>
+    <li><strong>上100レス/下100レス:</strong> 各投稿の前後100レスを表示できます（上は-100〜-1、下は+1〜+100）</li>
+    <li><strong>安価プレビュー:</strong> 「>>○○」にマウスを乗せると、該当する投稿をプレビュー表示します</li>
+  </ul>
+  
+  <h4>その他の機能</h4>
+  <ul>
+    <li><strong>URL共有:</strong> 検索結果のURLをコピーして他の人と共有できます</li>
+    <li><strong>ドキュメント一覧:</strong> 利用可能なドキュメントの詳細情報を確認できます</li>
+    <li><strong>スレッドリンク:</strong> 元の掲示板スレッドへのリンクも表示されます</li>
+  </ul>
 </div>
 
 <div id="documentsList" class="documents-list">
@@ -464,6 +511,11 @@
     docsList.style.display = (docsList.style.display === 'none' || docsList.style.display === '') ? 'block' : 'none';
   }
 
+  function toggleHelpPanel() {
+    const helpPanel = document.getElementById('helpPanel');
+    helpPanel.style.display = (helpPanel.style.display === 'none' || helpPanel.style.display === '') ? 'block' : 'none';
+  }
+
   function updateInfoPanel() {
     if (allDocumentThreads.size > 0) {
         const totalThreads = Array.from(allDocumentThreads.values()).reduce((sum, threads) => sum + threads.length, 0);
@@ -484,7 +536,7 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\    for (let i = 0; i < threadParts.length; i += ');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\          <span class="document-stats">スレッド:');
     const regex = new RegExp(`(${escapedTerm})`, 'gi');
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
@@ -535,18 +587,18 @@
 
   // レス範囲表示機能
   function showPostsInRange(thread, postElement, direction, keyword, button) {
-    // 既に表示されている場合は削除
-    const existingRange = postElement.parentNode.querySelector(`.range-posts-${direction}`);
-    if (existingRange) {
-      existingRange.remove();
-      button.disabled = false;
-      button.textContent = direction === 'up' ? '上100レス' : '下100レス';
-      return;
-    }
-
     const postNumber = parseInt(postElement.querySelector('.post-meta strong').textContent.split(':')[0]);
-    const startIndex = direction === 'up' ? Math.max(0, postNumber - 101) : postNumber - 1;
-    const endIndex = direction === 'up' ? postNumber - 1 : Math.min(thread.posts.length, postNumber + 99);
+    let startIndex, endIndex;
+    
+    if (direction === 'up') {
+      // 上100レス: レス番号-100から-1まで
+      startIndex = Math.max(0, postNumber - 100 - 1);
+      endIndex = Math.max(0, postNumber - 1);
+    } else {
+      // 下100レス: レス番号+1から+100まで  
+      startIndex = Math.min(thread.posts.length - 1, postNumber);
+      endIndex = Math.min(thread.posts.length, postNumber + 100);
+    }
     
     const postsToShow = thread.posts.slice(startIndex, endIndex);
     const container = document.createElement('div');
@@ -578,9 +630,6 @@
     } else {
       postElement.parentNode.insertBefore(container, postElement.nextSibling);
     }
-
-    button.disabled = true;
-    button.textContent = direction === 'up' ? '上100レス閉じる' : '下100レス閉じる';
 
     // 安価プレビューイベントを追加
     addAnchorPreviewEvents(container);
@@ -906,31 +955,13 @@
       setTimeout(() => { shareButton.textContent = originalText; }, 2000);
     }).catch(() => { prompt('以下のURLをコピーしてください:', url.toString()); });
   }
-
-  function showHelp() {
-    const modal = document.getElementById('helpModal');
-    modal.style.display = 'block';
-  }
-
-  function hideHelp() {
-    const modal = document.getElementById('helpModal');
-    modal.style.display = 'none';
-  }
   
   // イベントリスナーの設定
   document.getElementById('searchBtn').addEventListener('click', searchPosts);
   document.getElementById('clearBtn').addEventListener('click', clearSearch);
   document.getElementById('docsBtn').addEventListener('click', toggleDocumentsList);
   document.getElementById('shareBtn').addEventListener('click', shareUrl);
-  document.getElementById('helpBtn').addEventListener('click', showHelp);
-  
-  // ヘルプモーダルのイベントリスナー
-  document.querySelector('.help-close').addEventListener('click', hideHelp);
-  document.getElementById('helpModal').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('helpModal')) {
-      hideHelp();
-    }
-  });
+  document.getElementById('helpBtn').addEventListener('click', toggleHelpPanel);
   
   document.getElementById('refreshBtn').addEventListener('click', () => {
     resetFetchState();
