@@ -970,19 +970,26 @@
   }
 
   function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\  function matchesTerm(term, post, searchType, rangeOptions) {
-    const content = getSearchContent(post, searchType);
-    
-    if (searchType === '部分一致') {
-      return content.toLowerCase().includes(term.toLowerCase()) ||
-             post.author.toLowerCase().includes(term.toLowerCase()) ||
-             post.userId.toLowerCase().includes(term.toLowerCase());
-    } else if (searchType === '完全一致') {
-      return content === term;
-    } else if (searchType === '半完全一致') {
-      // 半完全一致の実装
-      if');
+  // 正規表現の特殊文字をエスケープ
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function matchesTerm(term, post, searchType, rangeOptions) {
+  const content = getSearchContent(post, searchType);
+
+  if (searchType === '部分一致') {
+    return content.toLowerCase().includes(term.toLowerCase()) ||
+           post.author.toLowerCase().includes(term.toLowerCase()) ||
+           post.userId.toLowerCase().includes(term.toLowerCase());
+  } else if (searchType === '完全一致') {
+    return content === term;
+  } else if (searchType === '半完全一致') {
+    // 半完全一致の実装（ここはまだ未完成ぽい）
+    if (/* 条件 */) {
+      return true;
+    }
   }
+}
 
   // レス範囲表示機能
   function showPostsInRange(thread, postElement, direction, keyword, button) {
