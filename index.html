@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf--8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ONJ 掲示板データ検索</title>
 <style>
@@ -19,6 +19,8 @@
   #refreshBtn:hover { background-color: #d32f2f; }
   #helpBtn { background-color: #9c27b0; }
   #helpBtn:hover { background-color: #7b1fa2; }
+  #advancedBtn { background-color: #795548; }
+  #advancedBtn:hover { background-color: #5d4037; }
   .controls { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .info { background: #e3f2fd; padding: 12px; margin-bottom: 20px; border-radius: 6px; border-left: 5px solid #1976d2; }
 
@@ -88,6 +90,10 @@
   .anchor-preview { position: absolute; background: #fff; border: 2px solid #1976d2; border-radius: 6px; padding: 10px; max-width: 400px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 0.9em; }
   .anchor-preview .preview-meta { font-weight: bold; color: #008000; margin-bottom: 5px; }
   .anchor-preview .preview-content { white-space: pre-wrap; line-height: 1.4; }
+  
+  /* レス番号のリンク */
+  .post-number-link { color: #1976d2; text-decoration: underline; cursor: pointer; }
+  .post-number-link:hover { background-color: #e3f2fd; }
 
   /* 検索結果サマリー */
   .search-summary { background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin-bottom: 20px; }
@@ -104,6 +110,13 @@
   .help-panel h4 { color: #333; margin-top: 20px; margin-bottom: 10px; }
   .help-panel ul { margin-left: 20px; }
   .help-panel li { margin-bottom: 5px; }
+  
+  /* 高度検索パネル */
+  .advanced-search { background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; padding: 15px; display: none; }
+  .advanced-search h4 { color: #1976d2; margin-top: 0; margin-bottom: 10px; }
+  .advanced-search textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-family: monospace; font-size: 0.9em; box-sizing: border-box; }
+  .advanced-search-examples { margin-top: 10px; font-size: 0.8em; color: #666; }
+  .advanced-search-examples pre { background: #f5f5f5; padding: 8px; border-radius: 4px; margin: 5px 0; }
 
   /* レスポンシブ対応 */
   @media (max-width: 768px) {
@@ -124,7 +137,20 @@
   <button id="clearBtn">クリア</button>
   <button id="docsBtn">ドキュメント一覧</button>
   <button id="shareBtn">URL共有</button>
+  <button id="advancedBtn">高度検索</button>
   <button id="helpBtn">説明</button>
+</div>
+
+<div id="advancedSearchPanel" class="advanced-search">
+  <h4>高度検索</h4>
+  <textarea id="advancedSearchInput" placeholder="例: /!(){<部分一致>[{[おはよう]<or>[こんにちは]}]}"></textarea>
+  <div class="advanced-search-examples">
+    <strong>例:</strong>
+    <pre>/!(){<部分一致>[{[おはよう]<or>[こんにちは]}]} - 部分一致での検索</pre>
+    <pre>/!(){<完全一致>[{[こん]<and{connect}>[ばんは]}]} - 完全一致での検索</pre>
+    <pre>/!(){<all>} - 全データ表示</pre>
+  </div>
+  <button id="advancedSearchBtn">高度検索実行</button>
 </div>
 
 <div class="fetch-options">
@@ -181,6 +207,7 @@
     <li><strong>ID検索:</strong> 「id:○○○○」の形式で入力すると、特定のIDで投稿されたレスを検索できます</li>
     <li><strong>検索範囲:</strong> 「全て」「スレタイのみ」「本文のみ」から選択できます</li>
     <li><strong>並び順:</strong> 「最新順」「古い順」「ドキュメント名順」「関連度順」から選択できます</li>
+    <li><strong>高度検索:</strong> より複雑な検索条件で検索できます（Ctrl+Enterで実行）</li>
   </ul>
   
   <h4>検索対象の設定</h4>
@@ -196,7 +223,11 @@
     <li><strong>全レス表示:</strong> 「全レス表示」ボタンでスレッド内の全ての投稿を表示できます</li>
     <li><strong>上100レス/下100レス:</strong> 各投稿の前後100レスを表示できます（上は-100〜-1、下は+1〜+100）</li>
     <li><strong>安価プレビュー:</strong> 「>>○○」にマウスを乗せると、該当する投稿をプレビュー表示します</li>
+    <li><strong>レス番号リンク:</strong> レス番号をクリックすると、元の掲示板の該当レスを開きます</li>
   </ul>
+  
+  <h4>高度検索</h4>
+  <p>高度検索では複雑な検索条件を指定できます。詳細な構文は高度検索パネルの例を参照してください。</p>
   
   <h4>その他の機能</h4>
   <ul>
@@ -367,6 +398,31 @@
               }
             }
           }
+
+          // レス本文の抽出（完全一致と半完全一致用）
+          let cleanPostBodyContent = postBodyContent;
+          if (postBodyContent) {
+            // 行の最後の<>部分の前の半角スペースを削除し、二番目に最後の<>部分の後の半角スペースを削除
+            const parts = postBodyContent.split('<>');
+            if (parts.length >= 2) {
+              // 最後の部分の前の半角スペースを削除
+              if (parts[parts.length - 1]) {
+                parts[parts.length - 1] = parts[parts.length - 1].replace(/^\s+/, '');
+              }
+              // 二番目に最後の部分の後の半角スペースを削除
+              if (parts.length >= 2 && parts[parts.length - 2]) {
+                parts[parts.length - 2] = parts[parts.length - 2].replace(/\s+$/, '');
+              }
+              // 最後の空の部分を除去
+              while (parts.length > 0 && !parts[parts.length - 1].trim()) {
+                parts.pop();
+              }
+              // 二番目に最後の<>以降の部分のみを抽出
+              if (parts.length >= 2) {
+                cleanPostBodyContent = parts.slice(parts.length - 2).join('<>');
+              }
+            }
+          }
           
           posts.push({
             postNumber: postNumber,
@@ -375,7 +431,8 @@
             postTime: postTime || '不明',
             postTimeDate: parsedTime,
             userId: userId || '不明',
-            content: postBodyContent.replace(/<br>/g, '\n').trim()
+            content: postBodyContent.replace(/<br>/g, '\n').trim(),
+            cleanContent: cleanPostBodyContent.replace(/<br>/g, '\n').trim() // 高度検索用
           });
         }
       }
@@ -516,6 +573,11 @@
     helpPanel.style.display = (helpPanel.style.display === 'none' || helpPanel.style.display === '') ? 'block' : 'none';
   }
 
+  function toggleAdvancedSearchPanel() {
+    const advancedPanel = document.getElementById('advancedSearchPanel');
+    advancedPanel.style.display = (advancedPanel.style.display === 'none' || advancedPanel.style.display === '') ? 'block' : 'none';
+  }
+
   function updateInfoPanel() {
     if (allDocumentThreads.size > 0) {
         const totalThreads = Array.from(allDocumentThreads.values()).reduce((sum, threads) => sum + threads.length, 0);
@@ -536,7 +598,8 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\          <span class="document-stats">スレッド:');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\          let emailOrSage = '';
+          let dateTimeAndI');
     const regex = new RegExp(`(${escapedTerm})`, 'gi');
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
@@ -585,6 +648,95 @@
     return sortedResults;
   }
 
+  // 高度検索パーサー
+  function parseAdvancedSearch(query) {
+    if (!query.startsWith('/!(){') || !query.endsWith('}')) {
+      throw new Error('高度検索は /!(){ で始まり } で終わる必要があります');
+    }
+    
+    const content = query.slice(5, -1); // /!(){} を除去
+    
+    if (content === '<all>') {
+      return { type: 'all' };
+    }
+    
+    // 検索タイプを解析
+    let searchType = '部分一致';
+    let searchContent = content;
+    
+    if (content.startsWith('<部分一致>')) {
+      searchType = '部分一致';
+      searchContent = content.slice(6);
+    } else if (content.startsWith('<完全一致>')) {
+      searchType = '完全一致';
+      searchContent = content.slice(6);
+    } else if (content.match(/^<{.*}半完全一致{.*}>/)) {
+      const match = content.match(/^<({.*})半完全一致({.*})>/);
+      searchType = '半完全一致';
+      searchContent = content.slice(match[0].length);
+      // 前後の文字数制限を解析
+    } else if (content.match(/^<.*半完全一致.*>/)) {
+      searchType = '半完全一致';
+      const match = content.match(/^<([^>]*)>/);
+      searchContent = content.slice(match[0].length);
+    }
+    
+    return {
+      type: searchType,
+      content: searchContent
+    };
+  }
+
+  // 高度検索実行
+  function executeAdvancedSearch(searchObj, threads) {
+    if (searchObj.type === 'all') {
+      // 全データ表示
+      return threads.map(thread => ({
+        ...thread,
+        matchedPosts: thread.posts
+      }));
+    }
+    
+    // 現在は基本的な実装のみ
+    const results = [];
+    const searchTerm = searchObj.content.replace(/\[|\]|{|}|\||<|>/g, '').toLowerCase();
+    
+    threads.forEach(thread => {
+      let matchedPosts = [];
+      
+      thread.posts.forEach(post => {
+        let shouldMatch = false;
+        
+        switch (searchObj.type) {
+          case '部分一致':
+            shouldMatch = post.content.toLowerCase().includes(searchTerm) ||
+                         post.author.toLowerCase().includes(searchTerm) ||
+                         post.userId.toLowerCase().includes(searchTerm);
+            break;
+          case '完全一致':
+            shouldMatch = post.cleanContent.toLowerCase().includes(searchTerm);
+            break;
+          case '半完全一致':
+            shouldMatch = post.cleanContent.toLowerCase().includes(searchTerm);
+            break;
+        }
+        
+        if (shouldMatch) {
+          matchedPosts.push(post);
+        }
+      });
+      
+      if (matchedPosts.length > 0) {
+        results.push({
+          ...thread,
+          matchedPosts: matchedPosts
+        });
+      }
+    });
+    
+    return results;
+  }
+
   // レス範囲表示機能
   function showPostsInRange(thread, postElement, direction, keyword, button) {
     const postNumber = parseInt(postElement.querySelector('.post-meta strong').textContent.split(':')[0]);
@@ -619,7 +771,9 @@
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
       postDiv.innerHTML = `
-        <div class="post-meta"><strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
+        <div class="post-meta">
+          <strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-number="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+        </div>
         <div class="post-content">${highlightedContent}</div>
       `;
       container.appendChild(postDiv);
@@ -631,8 +785,9 @@
       postElement.parentNode.insertBefore(container, postElement.nextSibling);
     }
 
-    // 安価プレビューイベントを追加
+    // 安価プレビューイベントとレス番号リンクイベントを追加
     addAnchorPreviewEvents(container);
+    addPostNumberLinkEvents(container);
   }
 
   function showAllPosts(thread, keyword, threadDiv) {
@@ -670,14 +825,17 @@
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
       postDiv.innerHTML = `
-        <div class="post-meta"><strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
+        <div class="post-meta">
+          <strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-number="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+        </div>
         <div class="post-content">${highlightedContent}</div>
       `;
       postsContainer.appendChild(postDiv);
     });
 
-    // 安価プレビューイベントを追加
+    // 安価プレビューイベントとレス番号リンクイベントを追加
     addAnchorPreviewEvents(postsContainer);
+    addPostNumberLinkEvents(postsContainer);
   }
 
   function addAnchorPreviewEvents(container) {
@@ -703,6 +861,19 @@
           document.body.removeChild(previewElement);
           previewElement = null;
         }
+      });
+    });
+  }
+
+  function addPostNumberLinkEvents(container) {
+    const postNumberLinks = container.querySelectorAll('.post-number-link');
+    postNumberLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const threadId = e.target.getAttribute('data-thread-id');
+        const postNumber = e.target.getAttribute('data-post-number');
+        const url = `https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNumber}-`;
+        window.open(url, '_blank');
       });
     });
   }
@@ -781,7 +952,7 @@
             
             postDiv.innerHTML = `
                 <div class="post-meta">
-                  <strong>${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+                  <strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-number="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
                   <div class="post-buttons">
                     <button class="range-up" data-post-num="${post.postNumber}">上100レス</button>
                     <button class="range-down" data-post-num="${post.postNumber}">下100レス</button>
@@ -807,8 +978,9 @@
             detailsDiv.appendChild(postDiv);
         });
 
-        // 安価プレビューイベントを追加
+        // 安価プレビューイベントとレス番号リンクイベントを追加
         addAnchorPreviewEvents(detailsDiv);
+        addPostNumberLinkEvents(detailsDiv);
 
         headerDiv.addEventListener('click', () => { 
           detailsDiv.style.display = (detailsDiv.style.display === 'none' || detailsDiv.style.display === '') ? 'block' : 'none'; 
@@ -892,8 +1064,51 @@
       const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
       const sortedResults = sortSearchResults(searchResults, sortOrder);
       renderSearchResults(sortedResults, keyword);
-      updateUrlParams(keyword);
+      updateUrlParams(keyword, searchType);
     }, 100);
+  }
+
+  async function performAdvancedSearch() {
+    const query = document.getElementById('advancedSearchInput').value.trim();
+    if (!query) {
+      alert('高度検索クエリを入力してください');
+      return;
+    }
+
+    try {
+      const searchObj = parseAdvancedSearch(query);
+      
+      const fetchSuccess = await fetchRequiredDocuments();
+      if (!fetchSuccess) return;
+
+      if (allDocumentThreads.size === 0) {
+        updateInfoPanel('<span style="color: #c0392b;">検索対象のドキュメントがありません。</span>');
+        return;
+      }
+
+      document.getElementById('results').innerHTML = '<div class="loading">高度検索実行中...</div>';
+      
+      setTimeout(() => {
+        let searchResults = [];
+        
+        allDocumentThreads.forEach((threads, docId) => {
+          const results = executeAdvancedSearch(searchObj, threads);
+          results.forEach(result => {
+            result.documentName = docId;
+          });
+          searchResults.push(...results);
+        });
+
+        currentSearchResults = searchResults;
+        const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
+        const sortedResults = sortSearchResults(searchResults, sortOrder);
+        renderSearchResults(sortedResults, query);
+        updateUrlParams('', 'all', query);
+      }, 100);
+      
+    } catch (error) {
+      alert('高度検索クエリにエラーがあります: ' + error.message);
+    }
   }
 
   function applySorting() {
@@ -906,12 +1121,13 @@
   
   function clearSearch() {
     document.getElementById('searchInput').value = '';
+    document.getElementById('advancedSearchInput').value = '';
     document.getElementById('results').innerHTML = '<p>検索ボックスにキーワードを入力して検索してください。</p>';
     document.getElementById('searchSummary').style.display = 'none';
     document.getElementById('sortOptions').style.display = 'none';
     currentSearchResults = [];
     updateInfoPanel();
-    updateUrlParams('');
+    updateUrlParams('', 'all', '');
   }
 
   function resetFetchState() {
@@ -927,15 +1143,53 @@
     infoDiv.innerHTML = `キャッシュをクリアしました。次の検索時にデータを再取得します。<br>準備完了。全${totalDocumentCount}件のドキュメントから検索できます。`;
   }
 
-  function updateUrlParams(keyword) {
+  function updateUrlParams(keyword, searchType = 'all', advancedQuery = '') {
     const url = new URL(window.location);
-    if (keyword) url.searchParams.set('search', keyword);
-    else url.searchParams.delete('search');
+    
+    // パスを更新
+    if (advancedQuery) {
+      url.pathname = '/advanced/';
+    } else if (searchType === 'title') {
+      url.pathname = '/suretai/';
+    } else if (searchType === 'body') {
+      url.pathname = '/honbun/';
+    } else {
+      url.pathname = '/subete/';
+    }
+    
+    // クエリパラメータを更新
+    url.search = '';
+    if (keyword) {
+      url.searchParams.set('search', keyword);
+    }
+    if (advancedQuery) {
+      url.searchParams.set('advanced', advancedQuery);
+    }
+    
     window.history.pushState({}, '', url);
   }
 
   function checkUrlParams() {
-    const searchParam = new URLSearchParams(window.location.search).get('search');
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const searchParam = params.get('search');
+    const advancedParam = params.get('advanced');
+    
+    // パスに基づいて検索タイプを設定
+    if (path.includes('/suretai/')) {
+      document.querySelector('input[name="searchType"][value="title"]').checked = true;
+    } else if (path.includes('/honbun/')) {
+      document.querySelector('input[name="searchType"][value="body"]').checked = true;
+    } else if (path.includes('/advanced/')) {
+      if (advancedParam) {
+        document.getElementById('advancedSearchInput').value = advancedParam;
+        performAdvancedSearch();
+        return;
+      }
+    } else {
+      document.querySelector('input[name="searchType"][value="all"]').checked = true;
+    }
+    
     if (searchParam) {
       document.getElementById('searchInput').value = searchParam;
       searchPosts();
@@ -946,9 +1200,29 @@
     const shareButton = document.getElementById('shareBtn');
     const originalText = shareButton.textContent;
     const keyword = document.getElementById('searchInput').value.trim();
+    const advancedQuery = document.getElementById('advancedSearchInput').value.trim();
+    const searchType = document.querySelector('input[name="searchType"]:checked').value;
+    
     const url = new URL(window.location);
-    if (keyword) url.searchParams.set('search', keyword);
-    else url.searchParams.delete('search');
+    
+    // パスを更新
+    if (advancedQuery) {
+      url.pathname = '/advanced/';
+      url.search = '';
+      url.searchParams.set('advanced', advancedQuery);
+    } else {
+      if (searchType === 'title') {
+        url.pathname = '/suretai/';
+      } else if (searchType === 'body') {
+        url.pathname = '/honbun/';
+      } else {
+        url.pathname = '/subete/';
+      }
+      url.search = '';
+      if (keyword) {
+        url.searchParams.set('search', keyword);
+      }
+    }
 
     navigator.clipboard.writeText(url.toString()).then(() => {
       shareButton.textContent = 'コピー完了';
@@ -962,6 +1236,8 @@
   document.getElementById('docsBtn').addEventListener('click', toggleDocumentsList);
   document.getElementById('shareBtn').addEventListener('click', shareUrl);
   document.getElementById('helpBtn').addEventListener('click', toggleHelpPanel);
+  document.getElementById('advancedBtn').addEventListener('click', toggleAdvancedSearchPanel);
+  document.getElementById('advancedSearchBtn').addEventListener('click', performAdvancedSearch);
   
   document.getElementById('refreshBtn').addEventListener('click', () => {
     resetFetchState();
@@ -980,6 +1256,10 @@
   
   document.getElementById('searchInput').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); searchPosts(); }
+  });
+  
+  document.getElementById('advancedSearchInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); performAdvancedSearch(); }
   });
   
   document.querySelectorAll('input[name="sortOrder"]').forEach(radio => {
