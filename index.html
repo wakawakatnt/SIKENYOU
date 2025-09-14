@@ -906,12 +906,31 @@
       setTimeout(() => { shareButton.textContent = originalText; }, 2000);
     }).catch(() => { prompt('以下のURLをコピーしてください:', url.toString()); });
   }
+
+  function showHelp() {
+    const modal = document.getElementById('helpModal');
+    modal.style.display = 'block';
+  }
+
+  function hideHelp() {
+    const modal = document.getElementById('helpModal');
+    modal.style.display = 'none';
+  }
   
   // イベントリスナーの設定
   document.getElementById('searchBtn').addEventListener('click', searchPosts);
   document.getElementById('clearBtn').addEventListener('click', clearSearch);
   document.getElementById('docsBtn').addEventListener('click', toggleDocumentsList);
   document.getElementById('shareBtn').addEventListener('click', shareUrl);
+  document.getElementById('helpBtn').addEventListener('click', showHelp);
+  
+  // ヘルプモーダルのイベントリスナー
+  document.querySelector('.help-close').addEventListener('click', hideHelp);
+  document.getElementById('helpModal').addEventListener('click', (e) => {
+    if (e.target === document.getElementById('helpModal')) {
+      hideHelp();
+    }
+  });
   
   document.getElementById('refreshBtn').addEventListener('click', () => {
     resetFetchState();
