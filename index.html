@@ -1148,13 +1148,13 @@
     
     // パスを更新
     if (advancedQuery) {
-      url.pathname = '/advanced/';
+      url.pathname = '?advanced';
     } else if (searchType === 'title') {
-      url.pathname = '/suretai/';
+      url.pathname = '?suretai';
     } else if (searchType === 'body') {
-      url.pathname = '/honbun/';
+      url.pathname = '?honbun';
     } else {
-      url.pathname = '/subete/';
+      url.pathname = '?subete';
     }
     
     // クエリパラメータを更新
@@ -1176,11 +1176,11 @@
     const advancedParam = params.get('advanced');
     
     // パスに基づいて検索タイプを設定
-    if (path.includes('/suretai/')) {
+    if (path.includes('?suretai')) {
       document.querySelector('input[name="searchType"][value="title"]').checked = true;
-    } else if (path.includes('/honbun/')) {
+    } else if (path.includes('?honbun')) {
       document.querySelector('input[name="searchType"][value="body"]').checked = true;
-    } else if (path.includes('/advanced/')) {
+    } else if (path.includes('?advanced')) {
       if (advancedParam) {
         document.getElementById('advancedSearchInput').value = advancedParam;
         performAdvancedSearch();
@@ -1207,16 +1207,16 @@
     
     // パスを更新
     if (advancedQuery) {
-      url.pathname = '/advanced/';
+      url.pathname = '?advanced';
       url.search = '';
       url.searchParams.set('advanced', advancedQuery);
     } else {
       if (searchType === 'title') {
-        url.pathname = '/suretai/';
+        url.pathname = '?suretai';
       } else if (searchType === 'body') {
-        url.pathname = '/honbun/';
+        url.pathname = '?honbun';
       } else {
-        url.pathname = '/subete/';
+        url.pathname = '?subete';
       }
       url.search = '';
       if (keyword) {
