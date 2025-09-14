@@ -794,201 +794,201 @@
   }
 
   function evaluateCondition(condition, post, searchType, rangeOptions) {
-    if (!condition) return false;
-    
-    if (condition.type === 'term') {
-      return matchesTerm(condition.value, post, searchType, rangeOptions);
-    } else if (condition.type === 'operation') {
-      return evaluateOperation(condition, post, searchType, rangeOptions);
-    }
-    
-    return false;
+  if (!condition) return false;
+  
+  if (condition.type === 'term') {
+    return matchesTerm(condition.value, post, searchType, rangeOptions);
+  } else if (condition.type === 'operation') {
+    return evaluateOperation(condition, post, searchType, rangeOptions);
   }
+  
+  return false;
+}
 
-  function evaluateOperation(operation, post, searchType, rangeOptions) {
-    const { operator, left, right } = operation;
-    
-    if (operator === '<and>') {
-      return evaluateCondition(left, post, searchType, rangeOptions) && 
-             evaluateCondition(right, post, searchType, rangeOptions);
-    } else if (operator === '<or>') {
-      return evaluateCondition(left, post, searchType, rangeOptions) || 
-             evaluateCondition(right, post, searchType, rangeOptions);
-    } else if (operator === '<not>') {
-      return !evaluateCondition(right, post, searchType, rangeOptions);
-    } else if (operator.startsWith('<and{connect')) {
-      return evaluateConnect(operation, post, searchType, rangeOptions);
-    } else if (operator.startsWith('<and{order')) {
-      return evaluateOrder(operation, post, searchType, rangeOptions);
-    }
-    
-    return false;
+function evaluateOperation(operation, post, searchType, rangeOptions) {
+  const { operator, left, right } = operation;
+  
+  if (operator === '<and>') {
+    return evaluateCondition(left, post, searchType, rangeOptions) && 
+           evaluateCondition(right, post, searchType, rangeOptions);
+  } else if (operator === '<or>') {
+    return evaluateCondition(left, post, searchType, rangeOptions) || 
+           evaluateCondition(right, post, searchType, rangeOptions);
+  } else if (operator === '<not>') {
+    return !evaluateCondition(right, post, searchType, rangeOptions);
+  } else if (operator.startsWith('<and{connect')) {
+    return evaluateConnect(operation, post, searchType, rangeOptions);
+  } else if (operator.startsWith('<and{order')) {
+    return evaluateOrder(operation, post, searchType, rangeOptions);
   }
+  
+  return false;
+}
 
-  function evaluateConnect(operation, post, searchType, rangeOptions) {
-    const { operator, left, right } = operation;
-    const leftTerm = left?.value || '';
-    const rightTerm = right?.value || '';
-    
-    if (!leftTerm || !rightTerm) return false;
-    
-    const content = getSearchContent(post, searchType);
-    
-    if (operator === '<and{connect}>') {
-      // 直接繋がっている
-      return content.includes(leftTerm + rightTerm);
-    } else if (operator.includes('connect{-') && operator.includes('}>')) {
-      // x文字以下の間隔
-      const match = operator.match(/connect\{-(\d+)\}/);
-      if (match) {
-        const maxGap = parseInt(match[1]);
-        const regex = new RegExp(escapeRegex(leftTerm) + '.{0,' + maxGap + '}' + escapeRegex(rightTerm), 'i');
-        return regex.test(content);
-      }
-    } else if (operator.includes('connect{space{}}')) {
-      // スペースのみ間に入る
-      const regex = new RegExp(escapeRegex(leftTerm) + '[\\s　]*' + escapeRegex(rightTerm), 'i');
+function evaluateConnect(operation, post, searchType, rangeOptions) {
+  const { operator, left, right } = operation;
+  const leftTerm = left?.value || '';
+  const rightTerm = right?.value || '';
+  
+  if (!leftTerm || !rightTerm) return false;
+  
+  const content = getSearchContent(post, searchType);
+  
+  if (operator === '<and{connect}>') {
+    // 直接繋がっている
+    return content.includes(leftTerm + rightTerm);
+  } else if (operator.includes('connect{-') && operator.includes('}>')) {
+    // x文字以下の間隔
+    const match = operator.match(/connect\{-(\d+)\}/);
+    if (match) {
+      const maxGap = parseInt(match[1]);
+      const regex = new RegExp(
+        escapeRegex(leftTerm) + '.{0,' + maxGap + '}' + escapeRegex(rightTerm),
+        'i'
+      );
       return regex.test(content);
     }
-    
-    return false;
+  } else if (operator.includes('connect{space{}}')) {
+    // スペースのみ間に入る
+    const regex = new RegExp(
+      escapeRegex(leftTerm) + '[\\s　]*' + escapeRegex(rightTerm),
+      'i'
+    );
+    return regex.test(content);
   }
+  
+  return false;
+}
 
-  function evaluateOrder(operation, post, searchType, rangeOptions) {
-    const { operator, left, right } = operation;
-    const leftTerm = left?.value || '';
-    const rightTerm = right?.value || '';
-    
-    if (!leftTerm || !rightTerm) return false;
-    
-    const content = getSearchContent(post, searchType);
-    const leftIndex = content.toLowerCase().indexOf(leftTerm.toLowerCase());
-    const rightIndex = content.toLowerCase().indexOf(rightTerm.toLowerCase());
-    
-    if (leftIndex === -1 || rightIndex === -1) return false;
-    
-    // 順序チェック
-    if (leftIndex >= rightIndex) return false;
-    
-    if (operator.includes('{connect}')) {
-      return evaluateConnect({...operation, operator: operator.replace('{order}', '')}, post, searchType, rangeOptions);
-    }
-    
-    return true;
+function evaluateOrder(operation, post, searchType, rangeOptions) {
+  const { operator, left, right } = operation;
+  const leftTerm = left?.value || '';
+  const rightTerm = right?.value || '';
+  
+  if (!leftTerm || !rightTerm) return false;
+  
+  const content = getSearchContent(post, searchType);
+  const leftIndex = content.toLowerCase().indexOf(leftTerm.toLowerCase());
+  const rightIndex = content.toLowerCase().indexOf(rightTerm.toLowerCase());
+  
+  if (leftIndex === -1 || rightIndex === -1) return false;
+  
+  // 順序チェック
+  if (leftIndex >= rightIndex) return false;
+  
+  if (operator.includes('{connect}')) {
+    return evaluateConnect(
+      { ...operation, operator: operator.replace('{order}', '') },
+      post,
+      searchType,
+      rangeOptions
+    );
   }
-
-  function matchesTerm(term, post, searchType, rangeOptions) {
-    const content = getSearchContent(post, searchType);
-    
-    if (searchType === '部分一致') {
-      return content.toLowerCase().includes(term.toLowerCase()) ||
-             post.author.toLowerCase().includes(term.toLowerCase()) ||
-             post.userId.toLowerCase().includes(term.toLowerCase());
-    } else if (searchType === '完全一致') {
-      return content === term;
-    } else if (searchType === '半完全一致') {
-      // 半完全一致の実装
-      if (rangeOptions) {
-        const beforeRange = parseRangeOption(rangeOptions.before);
-        const afterRange = parseRangeOption(rangeOptions.after);
-        return matchesWithRange(content, term, beforeRange, afterRange);
-      }
-      return content.includes(term);
-    }
-    
-    return false;
-  }
-
-  function parseRangeOption(rangeText) {
-    if (!rangeText) return { min: 0, max: Infinity };
-    
-    // {x-y}, {x}, {x-}, {-x}, {}, {-x^y-}, {x^y}, etc.
-    if (rangeText.includes('^')) {
-      // OR条件の処理
-      const parts = rangeText.split('^');
-      return {
-        type: 'or',
-        conditions: parts.map(part => parseRangeOption(part))
-      };
-    }
-    
-    const match = rangeText.match(/\{([^}]*)\}/);
-    if (match) {
-      const inner = match[1];
-      if (inner === '') return { min: 0, max: Infinity };
-      if (inner.includes('-')) {
-        const parts = inner.split('-');
-        if (parts[0] === '') {
-          // {-x}
-          return { min: 0, max: parseInt(parts[1]) || Infinity };
-        } else if (parts[1] === '') {
-          // {x-}
-          return { min: parseInt(parts[0]) || 0, max: Infinity };
-        } else {
-          // {x-y}
-          return { min: parseInt(parts[0]) || 0, max: parseInt(parts[1]) || Infinity };
-        }
-      } else {
-        // {x}
-        const num = parseInt(inner);
-        return { min: num, max: num };
-      }
-    }
-    
-    return { min: 0, max: Infinity };
-  }
-
-  function matchesWithRange(content, term, beforeRange, afterRange) {
-    const termIndex = content.toLowerCase().indexOf(term.toLowerCase());
-    if (termIndex === -1) return false;
-    
-    const beforeChars = termIndex;
-    const afterChars = content.length - termIndex - term.length;
-    
-    return matchesRangeCondition(beforeChars, beforeRange) && 
-           matchesRangeCondition(afterChars, afterRange);
-  }
-
-  function matchesRangeCondition(count, range) {
-    if (range.type === 'or') {
-      return range.conditions.some(condition => matchesRangeCondition(count, condition));
-    }
-    return count >= range.min && count <= range.max;
-  }
-
-  function getSearchContent(post, searchType) {
-    if (searchType === '完全一致') {
-      // 完全一致の場合、cleanContentを使用
-      return post.cleanContent;
-    } else if (searchType === '半完全一致') {
-      // 半完全一致の場合もcleanContentを使用
-      return post.cleanContent;
-    } else {
-      // 部分一致の場合、通常のcontentを使用
-      return post.content;
-    }
-  }
-
-  function escapeRegex(string) {
-  // 正規表現の特殊文字をエスケープ
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+  return true;
 }
 
 function matchesTerm(term, post, searchType, rangeOptions) {
   const content = getSearchContent(post, searchType);
-
+  
   if (searchType === '部分一致') {
-    return content.toLowerCase().includes(term.toLowerCase()) ||
-           post.author.toLowerCase().includes(term.toLowerCase()) ||
-           post.userId.toLowerCase().includes(term.toLowerCase());
+    return (
+      content.toLowerCase().includes(term.toLowerCase()) ||
+      post.author.toLowerCase().includes(term.toLowerCase()) ||
+      post.userId.toLowerCase().includes(term.toLowerCase())
+    );
   } else if (searchType === '完全一致') {
     return content === term;
   } else if (searchType === '半完全一致') {
-    // 半完全一致の実装（ここはまだ未完成ぽい）
-    if (/* 条件 */) {
-      return true;
+    // 半完全一致の実装
+    if (rangeOptions) {
+      const beforeRange = parseRangeOption(rangeOptions.before);
+      const afterRange = parseRangeOption(rangeOptions.after);
+      return matchesWithRange(content, term, beforeRange, afterRange);
+    }
+    return content.includes(term);
+  }
+  
+  return false;
+}
+
+function parseRangeOption(rangeText) {
+  if (!rangeText) return { min: 0, max: Infinity };
+  
+  // {x-y}, {x}, {x-}, {-x}, {}, {-x^y-}, {x^y}, etc.
+  if (rangeText.includes('^')) {
+    // OR条件の処理
+    const parts = rangeText.split('^');
+    return {
+      type: 'or',
+      conditions: parts.map((part) => parseRangeOption(part))
+    };
+  }
+  
+  const match = rangeText.match(/\{([^}]*)\}/);
+  if (match) {
+    const inner = match[1];
+    if (inner === '') return { min: 0, max: Infinity };
+    if (inner.includes('-')) {
+      const parts = inner.split('-');
+      if (parts[0] === '') {
+        // {-x}
+        return { min: 0, max: parseInt(parts[1]) || Infinity };
+      } else if (parts[1] === '') {
+        // {x-}
+        return { min: parseInt(parts[0]) || 0, max: Infinity };
+      } else {
+        // {x-y}
+        return { min: parseInt(parts[0]) || 0, max: parseInt(parts[1]) || Infinity };
+      }
+    } else {
+      // {x}
+      const num = parseInt(inner);
+      return { min: num, max: num };
     }
   }
+  
+  return { min: 0, max: Infinity };
+}
+
+function matchesWithRange(content, term, beforeRange, afterRange) {
+  const termIndex = content.toLowerCase().indexOf(term.toLowerCase());
+  if (termIndex === -1) return false;
+  
+  const beforeChars = termIndex;
+  const afterChars = content.length - termIndex - term.length;
+  
+  return (
+    matchesRangeCondition(beforeChars, beforeRange) &&
+    matchesRangeCondition(afterChars, afterRange)
+  );
+}
+
+function matchesRangeCondition(count, range) {
+  if (range.type === 'or') {
+    return range.conditions.some((condition) =>
+      matchesRangeCondition(count, condition)
+    );
+  }
+  return count >= range.min && count <= range.max;
+}
+
+function getSearchContent(post, searchType) {
+  if (searchType === '完全一致') {
+    // 完全一致の場合、cleanContentを使用
+    return post.cleanContent;
+  } else if (searchType === '半完全一致') {
+    // 半完全一致の場合もcleanContentを使用
+    return post.cleanContent;
+  } else {
+    // 部分一致の場合、通常のcontentを使用
+    return post.content;
+  }
+}
+
+function escapeRegex(string) {
+  // 正規表現の特殊文字をエスケープ
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
   // レス範囲表示機能
