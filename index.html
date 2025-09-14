@@ -484,8 +484,8 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`(${escapedTerm})`, 'g');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\    for (let i = 0; i < threadParts.length; i += ');
+    const regex = new RegExp(`(${escapedTerm})`, 'gi');
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
 
@@ -506,9 +506,10 @@
 
     const previewDiv = document.createElement('div');
     previewDiv.className = 'anchor-preview';
+    const cleanContent = targetPost.content.replace(/ <>$/, '').trim();
     previewDiv.innerHTML = `
       <div class="preview-meta">${targetPost.postNumber}: ${targetPost.author} | ${targetPost.postTime} | ID:${targetPost.userId}</div>
-      <div class="preview-content">${targetPost.content.substring(0, 200)}${targetPost.content.length > 200 ? '...' : ''}</div>
+      <div class="preview-content">${cleanContent.substring(0, 200)}${cleanContent.length > 200 ? '...' : ''}</div>
     `;
     return previewDiv;
   }
@@ -533,21 +534,31 @@
   }
 
   // レス範囲表示機能
-  function showPostsInRange(thread, postElement, direction, keyword) {
+  function showPostsInRange(thread, postElement, direction, keyword, button) {
+    // 既に表示されている場合は削除
+    const existingRange = postElement.parentNode.querySelector(`.range-posts-${direction}`);
+    if (existingRange) {
+      existingRange.remove();
+      button.disabled = false;
+      button.textContent = direction === 'up' ? '上100レス' : '下100レス';
+      return;
+    }
+
     const postNumber = parseInt(postElement.querySelector('.post-meta strong').textContent.split(':')[0]);
     const startIndex = direction === 'up' ? Math.max(0, postNumber - 101) : postNumber - 1;
     const endIndex = direction === 'up' ? postNumber - 1 : Math.min(thread.posts.length, postNumber + 99);
     
     const postsToShow = thread.posts.slice(startIndex, endIndex);
     const container = document.createElement('div');
-    container.className = 'range-posts';
+    container.className = `range-posts range-posts-${direction}`;
     
     postsToShow.forEach(post => {
       const postDiv = document.createElement('div');
       postDiv.className = 'post';
       
-      const postContent = processAnchors(post.content, thread);
-      const highlightedContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || 
+      const cleanContent = post.content.replace(/ <>$/, '').trim();
+      const postContent = processAnchors(cleanContent, thread);
+      const highlightedContent = (cleanContent.toLowerCase().includes(keyword.toLowerCase()) || 
                         post.author.toLowerCase().includes(keyword.toLowerCase()) || 
                         post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
         ? highlightSearchTerm(postContent, keyword) : postContent;
@@ -568,12 +579,24 @@
       postElement.parentNode.insertBefore(container, postElement.nextSibling);
     }
 
+    button.disabled = true;
+    button.textContent = direction === 'up' ? '上100レス閉じる' : '下100レス閉じる';
+
     // 安価プレビューイベントを追加
     addAnchorPreviewEvents(container);
   }
 
   function showAllPosts(thread, keyword, threadDiv) {
     const detailsDiv = threadDiv.querySelector('.thread-details');
+    
+    // 既存の範囲表示をすべて削除
+    const rangeElements = detailsDiv.querySelectorAll('.range-posts');
+    rangeElements.forEach(el => el.remove());
+    
+    // 既存のマッチしたレスをすべて削除
+    const existingPosts = detailsDiv.querySelectorAll('.post');
+    existingPosts.forEach(post => post.remove());
+    
     const postsContainer = detailsDiv.querySelector('.posts-container') || (() => {
       const container = document.createElement('div');
       container.className = 'posts-container';
@@ -587,8 +610,9 @@
       const postDiv = document.createElement('div');
       postDiv.className = 'post';
       
-      const postContent = processAnchors(post.content, thread);
-      const highlightedContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || 
+      const cleanContent = post.content.replace(/ <>$/, '').trim();
+      const postContent = processAnchors(cleanContent, thread);
+      const highlightedContent = (cleanContent.toLowerCase().includes(keyword.toLowerCase()) || 
                         post.author.toLowerCase().includes(keyword.toLowerCase()) || 
                         post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
         ? highlightSearchTerm(postContent, keyword) : postContent;
@@ -696,8 +720,9 @@
             const postDiv = document.createElement('div');
             postDiv.className = 'post';
             
-            const postContent = processAnchors(post.content, thread);
-            const highlightedContent = (post.content.toLowerCase().includes(keyword.toLowerCase()) || 
+            const cleanContent = post.content.replace(/ <>$/, '').trim();
+            const postContent = processAnchors(cleanContent, thread);
+            const highlightedContent = (cleanContent.toLowerCase().includes(keyword.toLowerCase()) || 
                           post.author.toLowerCase().includes(keyword.toLowerCase()) || 
                           post.userId.toLowerCase().includes(keyword.toLowerCase().replace(/\s/g, '')))
               ? highlightSearchTerm(postContent, keyword) : postContent;
@@ -722,14 +747,12 @@
             
             upButton.addEventListener('click', (e) => {
               e.stopPropagation();
-              showPostsInRange(thread, postDiv, 'up', keyword);
-              upButton.disabled = true;
+              showPostsInRange(thread, postDiv, 'up', keyword, upButton);
             });
             
             downButton.addEventListener('click', (e) => {
               e.stopPropagation();
-              showPostsInRange(thread, postDiv, 'down', keyword);
-              downButton.disabled = true;
+              showPostsInRange(thread, postDiv, 'down', keyword, downButton);
             });
             
             detailsDiv.appendChild(postDiv);
