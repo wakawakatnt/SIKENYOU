@@ -79,7 +79,8 @@
   .post { border-top: 1px dashed #ccc; padding: 12px 0; position: relative; }
   .post:first-child { border-top: none; }
   .post-meta { font-size: 0.9em; color: #555; margin-bottom: 8px; }
-  .post-meta strong { color: #008000; }
+  .post-meta strong { color: #008000; cursor: pointer; }
+  .post-meta strong:hover { text-decoration: underline; }
   .post-content { white-space: pre-wrap; line-height: 1.6; background: #fafafa; padding: 10px; border-radius: 4px; word-wrap: break-word; }
   .highlight { background-color: #ffeb3b; padding: 1px 2px; border-radius: 2px; }
   
@@ -88,10 +89,6 @@
   .anchor-preview { position: absolute; background: #fff; border: 2px solid #1976d2; border-radius: 6px; padding: 10px; max-width: 400px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 0.9em; }
   .anchor-preview .preview-meta { font-weight: bold; color: #008000; margin-bottom: 5px; }
   .anchor-preview .preview-content { white-space: pre-wrap; line-height: 1.4; }
-  
-  /* レス番号のリンク */
-  .post-number-link { color: #1976d2; text-decoration: underline; cursor: pointer; }
-  .post-number-link:hover { background-color: #e3f2fd; }
 
   /* 検索結果サマリー */
   .search-summary { background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; border-radius: 6px; margin-bottom: 20px; }
@@ -123,7 +120,7 @@
 <h2>ONJ 掲示板データ検索システム</h2>
 
 <div class="controls">
-  <input type="text" id="searchInput" placeholder="検索ワード（名前、ID、投稿内容）または高度検索（/!(){...}）">
+  <input type="text" id="searchInput" placeholder="検索ワード（名前、ID、投稿内容）">
   <button id="searchBtn">検索</button>
   <button id="clearBtn">クリア</button>
   <button id="docsBtn">ドキュメント一覧</button>
@@ -185,14 +182,7 @@
     <li><strong>ID検索:</strong> 「id:○○○○」の形式で入力すると、特定のIDで投稿されたレスを検索できます</li>
     <li><strong>検索範囲:</strong> 「全て」「スレタイのみ」「本文のみ」から選択できます</li>
     <li><strong>並び順:</strong> 「最新順」「古い順」「ドキュメント名順」「関連度順」から選択できます</li>
-    <li><strong>高度検索:</strong> 「/!(){...}」の形式でより複雑な検索条件を指定できます</li>
-  </ul>
-  
-  <h4>高度検索の例</h4>
-  <ul>
-    <li>/!(){&lt;部分一致&gt;[{[おはよう]&lt;or&gt;[こんにちは]}]} - 「おはよう」または「こんにちは」を部分一致で検索</li>
-    <li>/!(){&lt;完全一致&gt;[{[こん]&lt;and{connect}&gt;[ばんは]}]} - 「こん」と「ばんは」が繋がって完全一致で検索</li>
-    <li>/!(){&lt;all&gt;} - 全データを表示</li>
+    <li><strong>高度な検索:</strong> 「/!()」で始まる特殊な構文を使用して、より複雑な検索が可能です</li>
   </ul>
   
   <h4>検索対象の設定</h4>
@@ -208,7 +198,8 @@
     <li><strong>全レス表示:</strong> 「全レス表示」ボタンでスレッド内の全ての投稿を表示できます</li>
     <li><strong>上100レス/下100レス:</strong> 各投稿の前後100レスを表示できます（上は-100〜-1、下は+1〜+100）</li>
     <li><strong>安価プレビュー:</strong> 「>>○○」にマウスを乗せると、該当する投稿をプレビュー表示します</li>
-    <li><strong>レス番号リンク:</strong> レス番号をクリックすると、元の掲示板の該当レスを開きます</li>
+    <li><strong>安価クリック:</strong> 「>>○○」をクリックすると、該当する投稿を表示します</li>
+    <li><strong>レス番号クリック:</strong> レス番号をクリックすると、元スレッドの該当レスへジャンプします</li>
   </ul>
   
   <h4>その他の機能</h4>
@@ -380,31 +371,6 @@
               }
             }
           }
-
-          // レス本文の抽出（完全一致と半完全一致用）
-          let cleanPostBodyContent = postBodyContent;
-          if (postBodyContent) {
-            // 行の最後の<>部分の前の半角スペースを削除し、二番目に最後の<>部分の後の半角スペースを削除
-            const parts = postBodyContent.split('<>');
-            if (parts.length >= 2) {
-              // 最後の部分の前の半角スペースを削除
-              if (parts[parts.length - 1]) {
-                parts[parts.length - 1] = parts[parts.length - 1].replace(/^\s+/, '');
-              }
-              // 二番目に最後の部分の後の半角スペースを削除
-              if (parts.length >= 2 && parts[parts.length - 2]) {
-                parts[parts.length - 2] = parts[parts.length - 2].replace(/\s+$/, '');
-              }
-              // 最後の空の部分を除去
-              while (parts.length > 0 && !parts[parts.length - 1].trim()) {
-                parts.pop();
-              }
-              // 二番目に最後の<>以降の部分のみを抽出
-              if (parts.length >= 2) {
-                cleanPostBodyContent = parts.slice(parts.length - 2).join('<>');
-              }
-            }
-          }
           
           posts.push({
             postNumber: postNumber,
@@ -413,9 +379,7 @@
             postTime: postTime || '不明',
             postTimeDate: parsedTime,
             userId: userId || '不明',
-            content: postBodyContent.replace(/<br>/g, '\n').trim(),
-            cleanContent: cleanPostBodyContent.replace(/<br>/g, '\n').trim(), // 高度検索用
-            originalLine: line // 完全一致用の元の行
+            content: postBodyContent.replace(/<br>/g, '\n').trim()
           });
         }
       }
@@ -576,7 +540,6 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-
     const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`(${escapedTerm})`, 'gi');
     return text.replace(regex, '<span class="highlight">$1</span>');
@@ -607,6 +570,77 @@
     return previewDiv;
   }
 
+  // 安価先のレスを表示する関数
+  function showAnchorPost(postNum, threadId) {
+    const threads = Array.from(allDocumentThreads.values()).flat();
+    const thread = threads.find(t => t.id === threadId);
+    if (!thread) return;
+
+    const targetPost = thread.posts.find(p => p.postNumber === parseInt(postNum));
+    if (!targetPost) return;
+
+    // 該当スレッドの要素を探す
+    const threadElements = document.querySelectorAll('.thread-result');
+    let targetThreadElement = null;
+    
+    threadElements.forEach(element => {
+      const threadTitle = element.querySelector('.thread-title');
+      if (threadTitle && threadTitle.textContent.includes(thread.title)) {
+        targetThreadElement = element;
+      }
+    });
+
+    if (targetThreadElement) {
+      // スレッドの詳細を展開
+      const detailsDiv = targetThreadElement.querySelector('.thread-details');
+      detailsDiv.style.display = 'block';
+      
+      // 既存のレスがあるか確認
+      const existingPosts = detailsDiv.querySelectorAll('.post');
+      let targetPostElement = null;
+      
+      existingPosts.forEach(postElement => {
+        const postMeta = postElement.querySelector('.post-meta strong');
+        if (postMeta && postMeta.textContent.startsWith(postNum + ':')) {
+          targetPostElement = postElement;
+        }
+      });
+
+      // レスが表示されていない場合は追加
+      if (!targetPostElement) {
+        const postDiv = document.createElement('div');
+        postDiv.className = 'post';
+        const cleanContent = targetPost.content.replace(/ <>$/, '').trim();
+        const postContent = processAnchors(cleanContent, thread);
+        const sageIndicator = targetPost.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
+        
+        postDiv.innerHTML = `
+          <div class="post-meta">
+            <strong data-thread-id="${thread.id}" data-post-num="${targetPost.postNumber}">${targetPost.postNumber}: ${targetPost.author}</strong>${sageIndicator} | 時刻: ${targetPost.postTime} | ID:${targetPost.userId}
+            <div class="post-buttons">
+              <button class="range-up" data-post-num="${targetPost.postNumber}">上100レス</button>
+              <button class="range-down" data-post-num="${targetPost.postNumber}">下100レス</button>
+            </div>
+          </div>
+          <div class="post-content">${postContent}</div>
+        `;
+        
+        detailsDiv.appendChild(postDiv);
+        targetPostElement = postDiv;
+        
+        // イベントリスナーを追加
+        addPostEventListeners(postDiv, thread);
+      }
+
+      // スクロールして表示
+      targetPostElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      targetPostElement.style.backgroundColor = '#ffffcc';
+      setTimeout(() => {
+        targetPostElement.style.backgroundColor = '';
+      }, 2000);
+    }
+  }
+
   function sortSearchResults(results, sortOrder) {
     const sortedResults = [...results];
     switch (sortOrder) {
@@ -625,371 +659,6 @@
     }
     return sortedResults;
   }
-
-  // 高度検索パーサー
-  function parseAdvancedSearch(query) {
-    if (!query.startsWith('/!(){') || !query.endsWith('}')) {
-      throw new Error('高度検索は /!(){ で始まり } で終わる必要があります');
-    }
-    
-    const content = query.slice(5, -1); // /!(){} を除去
-    
-    if (content === '<all>') {
-      return { type: 'all' };
-    }
-    
-    // 検索タイプを解析
-    let searchType = '部分一致';
-    let searchContent = content;
-    let rangeOptions = null;
-    
-    if (content.startsWith('<部分一致>')) {
-      searchType = '部分一致';
-      searchContent = content.slice(6);
-    } else if (content.startsWith('<完全一致>')) {
-      searchType = '完全一致';
-      searchContent = content.slice(6);
-    } else if (content.match(/^<.*半完全一致.*>/)) {
-      const match = content.match(/^<([^>]*)>/);
-      searchType = '半完全一致';
-      searchContent = content.slice(match[0].length);
-      
-      // 範囲オプションを解析
-      const rangeText = match[1];
-      if (rangeText.includes('半完全一致')) {
-        const rangeParts = rangeText.split('半完全一致');
-        if (rangeParts.length >= 2) {
-          const beforeRange = rangeParts[0];
-          const afterRange = rangeParts[1];
-          rangeOptions = { before: beforeRange, after: afterRange };
-        }
-      }
-    }
-    
-    return {
-      type: searchType,
-      content: searchContent,
-      rangeOptions: rangeOptions
-    };
-  }
-
-  // 条件式パーサー
-  function parseConditions(content) {
-    // 基本的な構造: [{[条件1]<op>[条件2]}]
-    const conditions = [];
-    let depth = 0;
-    let current = '';
-    let inBracket = false;
-    
-    for (let i = 0; i < content.length; i++) {
-      const char = content[i];
-      
-      if (char === '[' && content[i + 1] === '{') {
-        if (depth === 0) {
-          inBracket = true;
-          i++; // skip {
-          continue;
-        }
-        depth++;
-      } else if (char === '}' && content[i + 1] === ']') {
-        if (depth === 0 && inBracket) {
-          conditions.push(parseCondition(current));
-          current = '';
-          inBracket = false;
-          i++; // skip ]
-          continue;
-        }
-        depth--;
-      }
-      
-      if (inBracket) {
-        current += char;
-      }
-    }
-    
-    if (current) {
-      conditions.push(parseCondition(current));
-    }
-    
-    return conditions;
-  }
-
-  function parseCondition(conditionText) {
-    // <and>, <or>, <not>, <ifage>, <ifsage> などの演算子を解析
-    const operators = ['<and{order}{connect{space{}}>', '<and{order}{connect{-', '<and{order}{connect}>', '<and{connect{space{}}>', '<and{connect{-', '<and{connect}>', '<and{order}>', '<and>', '<or>', '<not>', '<ifage>', '<ifsage>'];
-    
-    for (const op of operators) {
-      if (conditionText.includes(op)) {
-        let opEnd = op;
-        if (op.includes('{-') && !op.endsWith('}>')) {
-          // 数字を含む場合の処理
-          const match = conditionText.match(new RegExp(op.replace('{-', '{-(\\d+)') + '}>'));
-          if (match) {
-            opEnd = match[0];
-          }
-        }
-        
-        const parts = conditionText.split(opEnd);
-        return {
-          type: 'operation',
-          operator: opEnd,
-          left: parts[0] ? parseCondition(parts[0]) : null,
-          right: parts[1] ? parseCondition(parts[1]) : null
-        };
-      }
-    }
-    
-    // 基本的な検索語句
-    if (conditionText.startsWith('[') && conditionText.endsWith(']')) {
-      return {
-        type: 'term',
-        value: conditionText.slice(1, -1)
-      };
-    }
-    
-    return {
-      type: 'term',
-      value: conditionText
-    };
-  }
-
-  // 高度検索実行
-  function executeAdvancedSearch(searchObj, threads) {
-    if (searchObj.type === 'all') {
-      // 全データ表示
-      return threads.map(thread => ({
-        ...thread,
-        matchedPosts: thread.posts
-      }));
-    }
-    
-    const results = [];
-    const conditions = parseConditions(searchObj.content);
-    
-    threads.forEach(thread => {
-      let matchedPosts = [];
-      
-      thread.posts.forEach(post => {
-        if (evaluateConditions(conditions, post, searchObj.type, searchObj.rangeOptions)) {
-          matchedPosts.push(post);
-        }
-      });
-      
-      if (matchedPosts.length > 0) {
-        results.push({
-          ...thread,
-          matchedPosts: matchedPosts
-        });
-      }
-    });
-    
-    return results;
-  }
-
-  function evaluateConditions(conditions, post, searchType, rangeOptions) {
-    if (conditions.length === 0) return false;
-    
-    // 複数条件の場合、すべて満たす必要がある
-    return conditions.every(condition => evaluateCondition(condition, post, searchType, rangeOptions));
-  }
-
-  function evaluateCondition(condition, post, searchType, rangeOptions) {
-  if (!condition) return false;
-  
-  if (condition.type === 'term') {
-    return matchesTerm(condition.value, post, searchType, rangeOptions);
-  } else if (condition.type === 'operation') {
-    return evaluateOperation(condition, post, searchType, rangeOptions);
-  }
-  
-  return false;
-}
-
-function evaluateOperation(operation, post, searchType, rangeOptions) {
-  const { operator, left, right } = operation;
-  
-  if (operator === '<and>') {
-    return evaluateCondition(left, post, searchType, rangeOptions) && 
-           evaluateCondition(right, post, searchType, rangeOptions);
-  } else if (operator === '<or>') {
-    return evaluateCondition(left, post, searchType, rangeOptions) || 
-           evaluateCondition(right, post, searchType, rangeOptions);
-  } else if (operator === '<not>') {
-    return !evaluateCondition(right, post, searchType, rangeOptions);
-  } else if (operator.startsWith('<and{connect')) {
-    return evaluateConnect(operation, post, searchType, rangeOptions);
-  } else if (operator.startsWith('<and{order')) {
-    return evaluateOrder(operation, post, searchType, rangeOptions);
-  }
-  
-  return false;
-}
-
-function evaluateConnect(operation, post, searchType, rangeOptions) {
-  const { operator, left, right } = operation;
-  const leftTerm = left?.value || '';
-  const rightTerm = right?.value || '';
-  
-  if (!leftTerm || !rightTerm) return false;
-  
-  const content = getSearchContent(post, searchType);
-  
-  if (operator === '<and{connect}>') {
-    // 直接繋がっている
-    return content.includes(leftTerm + rightTerm);
-  } else if (operator.includes('connect{-') && operator.includes('}>')) {
-    // x文字以下の間隔
-    const match = operator.match(/connect\{-(\d+)\}/);
-    if (match) {
-      const maxGap = parseInt(match[1]);
-      const regex = new RegExp(
-        escapeRegex(leftTerm) + '.{0,' + maxGap + '}' + escapeRegex(rightTerm),
-        'i'
-      );
-      return regex.test(content);
-    }
-  } else if (operator.includes('connect{space{}}')) {
-    // スペースのみ間に入る
-    const regex = new RegExp(
-      escapeRegex(leftTerm) + '[\\s　]*' + escapeRegex(rightTerm),
-      'i'
-    );
-    return regex.test(content);
-  }
-  
-  return false;
-}
-
-function evaluateOrder(operation, post, searchType, rangeOptions) {
-  const { operator, left, right } = operation;
-  const leftTerm = left?.value || '';
-  const rightTerm = right?.value || '';
-  
-  if (!leftTerm || !rightTerm) return false;
-  
-  const content = getSearchContent(post, searchType);
-  const leftIndex = content.toLowerCase().indexOf(leftTerm.toLowerCase());
-  const rightIndex = content.toLowerCase().indexOf(rightTerm.toLowerCase());
-  
-  if (leftIndex === -1 || rightIndex === -1) return false;
-  
-  // 順序チェック
-  if (leftIndex >= rightIndex) return false;
-  
-  if (operator.includes('{connect}')) {
-    return evaluateConnect(
-      { ...operation, operator: operator.replace('{order}', '') },
-      post,
-      searchType,
-      rangeOptions
-    );
-  }
-  
-  return true;
-}
-
-function matchesTerm(term, post, searchType, rangeOptions) {
-  const content = getSearchContent(post, searchType);
-  
-  if (searchType === '部分一致') {
-    return (
-      content.toLowerCase().includes(term.toLowerCase()) ||
-      post.author.toLowerCase().includes(term.toLowerCase()) ||
-      post.userId.toLowerCase().includes(term.toLowerCase())
-    );
-  } else if (searchType === '完全一致') {
-    return content === term;
-  } else if (searchType === '半完全一致') {
-    // 半完全一致の実装
-    if (rangeOptions) {
-      const beforeRange = parseRangeOption(rangeOptions.before);
-      const afterRange = parseRangeOption(rangeOptions.after);
-      return matchesWithRange(content, term, beforeRange, afterRange);
-    }
-    return content.includes(term);
-  }
-  
-  return false;
-}
-
-function parseRangeOption(rangeText) {
-  if (!rangeText) return { min: 0, max: Infinity };
-  
-  // {x-y}, {x}, {x-}, {-x}, {}, {-x^y-}, {x^y}, etc.
-  if (rangeText.includes('^')) {
-    // OR条件の処理
-    const parts = rangeText.split('^');
-    return {
-      type: 'or',
-      conditions: parts.map((part) => parseRangeOption(part))
-    };
-  }
-  
-  const match = rangeText.match(/\{([^}]*)\}/);
-  if (match) {
-    const inner = match[1];
-    if (inner === '') return { min: 0, max: Infinity };
-    if (inner.includes('-')) {
-      const parts = inner.split('-');
-      if (parts[0] === '') {
-        // {-x}
-        return { min: 0, max: parseInt(parts[1]) || Infinity };
-      } else if (parts[1] === '') {
-        // {x-}
-        return { min: parseInt(parts[0]) || 0, max: Infinity };
-      } else {
-        // {x-y}
-        return { min: parseInt(parts[0]) || 0, max: parseInt(parts[1]) || Infinity };
-      }
-    } else {
-      // {x}
-      const num = parseInt(inner);
-      return { min: num, max: num };
-    }
-  }
-  
-  return { min: 0, max: Infinity };
-}
-
-function matchesWithRange(content, term, beforeRange, afterRange) {
-  const termIndex = content.toLowerCase().indexOf(term.toLowerCase());
-  if (termIndex === -1) return false;
-  
-  const beforeChars = termIndex;
-  const afterChars = content.length - termIndex - term.length;
-  
-  return (
-    matchesRangeCondition(beforeChars, beforeRange) &&
-    matchesRangeCondition(afterChars, afterRange)
-  );
-}
-
-function matchesRangeCondition(count, range) {
-  if (range.type === 'or') {
-    return range.conditions.some((condition) =>
-      matchesRangeCondition(count, condition)
-    );
-  }
-  return count >= range.min && count <= range.max;
-}
-
-function getSearchContent(post, searchType) {
-  if (searchType === '完全一致') {
-    // 完全一致の場合、cleanContentを使用
-    return post.cleanContent;
-  } else if (searchType === '半完全一致') {
-    // 半完全一致の場合もcleanContentを使用
-    return post.cleanContent;
-  } else {
-    // 部分一致の場合、通常のcontentを使用
-    return post.content;
-  }
-}
-
-function escapeRegex(string) {
-  // 正規表現の特殊文字をエスケープ
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
   // レス範囲表示機能
   function showPostsInRange(thread, postElement, direction, keyword, button) {
@@ -1025,12 +694,19 @@ function escapeRegex(string) {
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
       postDiv.innerHTML = `
-        <div class="post-meta">
-          <strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-number="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
-        </div>
+        <div class="post-meta"><strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
         <div class="post-content">${highlightedContent}</div>
       `;
       container.appendChild(postDiv);
+      
+      // レス番号クリックイベントを追加
+      const postNumElement = postDiv.querySelector('.post-meta strong');
+      postNumElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const postNum = postNumElement.getAttribute('data-post-num');
+        const threadId = postNumElement.getAttribute('data-thread-id');
+        window.open(`https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`, '_blank');
+      });
     });
 
     if (direction === 'up') {
@@ -1039,9 +715,8 @@ function escapeRegex(string) {
       postElement.parentNode.insertBefore(container, postElement.nextSibling);
     }
 
-    // 安価プレビューイベントとレス番号リンクイベントを追加
+    // 安価プレビューイベントを追加
     addAnchorPreviewEvents(container);
-    addPostNumberLinkEvents(container);
   }
 
   function showAllPosts(thread, keyword, threadDiv) {
@@ -1079,17 +754,55 @@ function escapeRegex(string) {
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
       postDiv.innerHTML = `
-        <div class="post-meta">
-          <strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-number="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
-        </div>
+        <div class="post-meta"><strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
         <div class="post-content">${highlightedContent}</div>
       `;
       postsContainer.appendChild(postDiv);
+      
+      // レス番号クリックイベントを追加
+      const postNumElement = postDiv.querySelector('.post-meta strong');
+      postNumElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const postNum = postNumElement.getAttribute('data-post-num');
+        const threadId = postNumElement.getAttribute('data-thread-id');
+        window.open(`https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`, '_blank');
+      });
     });
 
-    // 安価プレビューイベントとレス番号リンクイベントを追加
+    // 安価プレビューイベントを追加
     addAnchorPreviewEvents(postsContainer);
-    addPostNumberLinkEvents(postsContainer);
+  }
+
+  function addPostEventListeners(postDiv, thread) {
+    // 上100レス・下100レスボタンのイベントリスナー
+    const upButton = postDiv.querySelector('.range-up');
+    const downButton = postDiv.querySelector('.range-down');
+    const keyword = document.getElementById('searchInput').value.trim();
+    
+    if (upButton) {
+      upButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showPostsInRange(thread, postDiv, 'up', keyword, upButton);
+      });
+    }
+    
+    if (downButton) {
+      downButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showPostsInRange(thread, postDiv, 'down', keyword, downButton);
+      });
+    }
+    
+    // レス番号クリックイベントを追加
+    const postNumElement = postDiv.querySelector('.post-meta strong');
+    if (postNumElement) {
+      postNumElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const postNum = postNumElement.getAttribute('data-post-num');
+        const threadId = postNumElement.getAttribute('data-thread-id');
+        window.open(`https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`, '_blank');
+      });
+    }
   }
 
   function addAnchorPreviewEvents(container) {
@@ -1116,18 +829,14 @@ function escapeRegex(string) {
           previewElement = null;
         }
       });
-    });
-  }
-
-  function addPostNumberLinkEvents(container) {
-    const postNumberLinks = container.querySelectorAll('.post-number-link');
-    postNumberLinks.forEach(link => {
+      
+      // 安価クリックイベントを追加
       link.addEventListener('click', (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        const postNum = e.target.getAttribute('data-post-num');
         const threadId = e.target.getAttribute('data-thread-id');
-        const postNumber = e.target.getAttribute('data-post-number');
-        const url = `https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNumber}-`;
-        window.open(url, '_blank');
+        showAnchorPost(postNum, threadId);
       });
     });
   }
@@ -1206,7 +915,7 @@ function escapeRegex(string) {
             
             postDiv.innerHTML = `
                 <div class="post-meta">
-                  <strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-number="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+                  <strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
                   <div class="post-buttons">
                     <button class="range-up" data-post-num="${post.postNumber}">上100レス</button>
                     <button class="range-down" data-post-num="${post.postNumber}">下100レス</button>
@@ -1215,26 +924,14 @@ function escapeRegex(string) {
                 <div class="post-content">${highlightedContent}</div>
             `;
             
-            // 上100レス・下100レスボタンのイベントリスナー
-            const upButton = postDiv.querySelector('.range-up');
-            const downButton = postDiv.querySelector('.range-down');
-            
-            upButton.addEventListener('click', (e) => {
-              e.stopPropagation();
-              showPostsInRange(thread, postDiv, 'up', keyword, upButton);
-            });
-            
-            downButton.addEventListener('click', (e) => {
-              e.stopPropagation();
-              showPostsInRange(thread, postDiv, 'down', keyword, downButton);
-            });
+            // イベントリスナーを追加
+            addPostEventListeners(postDiv, thread);
             
             detailsDiv.appendChild(postDiv);
         });
 
-        // 安価プレビューイベントとレス番号リンクイベントを追加
+        // 安価プレビューイベントを追加
         addAnchorPreviewEvents(detailsDiv);
-        addPostNumberLinkEvents(detailsDiv);
 
         headerDiv.addEventListener('click', () => { 
           detailsDiv.style.display = (detailsDiv.style.display === 'none' || detailsDiv.style.display === '') ? 'block' : 'none'; 
@@ -1245,9 +942,173 @@ function escapeRegex(string) {
     });
   }
 
+  // 高度な検索を解析する関数
+  function parseAdvancedSearch(query) {
+    if (!query.startsWith('/!()')) return null;
+    
+    const searchBody = query.substring(4);
+    const result = {
+      type: 'advanced',
+      conditions: [],
+      all: false,
+      documentRange: null,
+      searchMode: 'partial'
+    };
+
+    // <all>の場合
+    if (searchBody.match(/^{<all>}/)) {
+      result.all = true;
+      return result;
+    }
+
+    // ドキュメント範囲を解析
+    const docMatch = searchBody.match(/<document{(\d+)(?:-(\d+))?}>/);
+    if (docMatch) {
+      result.documentRange = {
+        start: parseInt(docMatch[1]),
+        end: docMatch[2] ? parseInt(docMatch[2]) : parseInt(docMatch[1])
+      };
+    }
+
+    // 検索モードを解析
+    if (searchBody.includes('<完全一致>')) {
+      result.searchMode = 'exact';
+    } else if (searchBody.includes('<半完全一致>')) {
+      result.searchMode = 'semi-exact';
+      // 文字数範囲を解析
+      const rangeMatch = searchBody.match(/<{(\d+)?-?(\d+)?}半完全一致{(\d+)?-?(\d+)?}>/);
+      if (rangeMatch) {
+        result.prefixRange = { min: rangeMatch[1] || 0, max: rangeMatch[2] || Infinity };
+        result.suffixRange = { min: rangeMatch[3] || 0, max: rangeMatch[4] || Infinity };
+      }
+    }
+
+    // 条件を解析する関数
+    function parseConditions(str) {
+      const conditions = [];
+      // 簡略化した解析（完全な実装には更に複雑な処理が必要）
+      const parts = str.split(/<(and|or|not|ifage|ifsage)>/);
+      
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (part.includes('[') && part.includes(']')) {
+          const keyword = part.match(/\[([^\]]+)\]/)?.[1];
+          if (keyword) {
+            const operator = parts[i-1] || 'and';
+            conditions.push({ keyword, operator });
+          }
+        }
+      }
+      
+      return conditions;
+    }
+
+    // 条件部分を解析
+    const conditionMatch = searchBody.match(/\[(.+)\]/);
+    if (conditionMatch) {
+      result.conditions = parseConditions(conditionMatch[0]);
+    }
+
+    return result;
+  }
+
+  // 高度な検索を実行する関数
+  function executeAdvancedSearch(parsedQuery) {
+    let results = [];
+    
+    // 全表示の場合
+    if (parsedQuery.all) {
+      allDocumentThreads.forEach((threads, docId) => {
+        threads.forEach(thread => {
+          results.push({
+            ...thread,
+            matchedPosts: thread.posts,
+            documentName: docId
+          });
+        });
+      });
+      return results;
+    }
+
+    // ドキュメント範囲でフィルタリング
+    let targetDocuments = allDocumentThreads;
+    if (parsedQuery.documentRange) {
+      targetDocuments = new Map();
+      for (let i = parsedQuery.documentRange.start; i <= parsedQuery.documentRange.end; i++) {
+        const docId = String(i);
+        if (allDocumentThreads.has(docId)) {
+          targetDocuments.set(docId, allDocumentThreads.get(docId));
+        }
+      }
+    }
+
+    // 検索実行
+    targetDocuments.forEach((threads, docId) => {
+      threads.forEach(thread => {
+        const matchedPosts = [];
+        
+        thread.posts.forEach(post => {
+          let matches = false;
+          let cleanContent = post.content;
+          
+          // 完全一致・半完全一致の場合は本文のみを抽出
+          if (parsedQuery.searchMode === 'exact' || parsedQuery.searchMode === 'semi-exact') {
+            // 最後の<>の前の半角スペースを削除
+            cleanContent = cleanContent.replace(/ <>$/, '');
+            // 二番目に最後の<>の後を抽出（簡略化）
+            const parts = cleanContent.split('<>');
+            if (parts.length >= 2) {
+              cleanContent = parts.slice(-2, -1)[0] || '';
+            }
+          }
+          
+          // 条件チェック（簡略化）
+          for (const condition of parsedQuery.conditions) {
+            const keyword = condition.keyword.toLowerCase();
+            const contentLower = cleanContent.toLowerCase();
+            
+            if (parsedQuery.searchMode === 'exact') {
+              matches = contentLower === keyword;
+            } else if (parsedQuery.searchMode === 'semi-exact') {
+              matches = contentLower.includes(keyword);
+            } else {
+              matches = contentLower.includes(keyword) || 
+                       post.author.toLowerCase().includes(keyword) ||
+                       post.userId.toLowerCase().includes(keyword);
+            }
+            
+            if (matches) break;
+          }
+          
+          if (matches) {
+            matchedPosts.push(post);
+          }
+        });
+        
+        if (matchedPosts.length > 0) {
+          results.push({
+            ...thread,
+            matchedPosts,
+            documentName: docId
+          });
+        }
+      });
+    });
+    
+    return results;
+  }
+
   function searchInThreads(threads, keyword, documentName = null, searchType = 'all') {
     const lowerKeyword = keyword.toLowerCase();
     const searchResults = [];
+    
+    // 高度な検索の確認
+    const advancedQuery = parseAdvancedSearch(keyword);
+    if (advancedQuery) {
+      return executeAdvancedSearch(advancedQuery);
+    }
+    
+    // 通常のID検索
     const idSearchMatch = searchType !== 'title' ? keyword.match(/^id:\s*(.*)/i) : null;
 
     if (idSearchMatch) {
@@ -1296,12 +1157,6 @@ function escapeRegex(string) {
       return;
     }
 
-    // 高度検索かどうかを判定
-    if (keyword.startsWith('/!(){') && keyword.endsWith('}')) {
-      await performAdvancedSearch();
-      return;
-    }
-
     const fetchSuccess = await fetchRequiredDocuments();
     if (!fetchSuccess) return;
 
@@ -1316,9 +1171,16 @@ function escapeRegex(string) {
       let searchResults = [];
       const searchType = document.querySelector('input[name="searchType"]:checked').value;
       
-      allDocumentThreads.forEach((threads, docId) => {
-        searchResults.push(...searchInThreads(threads, keyword, docId, searchType));
-      });
+      // 高度な検索の場合
+      const advancedQuery = parseAdvancedSearch(keyword);
+      if (advancedQuery) {
+        searchResults = executeAdvancedSearch(advancedQuery);
+      } else {
+        // 通常の検索
+        allDocumentThreads.forEach((threads, docId) => {
+          searchResults.push(...searchInThreads(threads, keyword, docId, searchType));
+        });
+      }
 
       currentSearchResults = searchResults;
       const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
@@ -1326,49 +1188,6 @@ function escapeRegex(string) {
       renderSearchResults(sortedResults, keyword);
       updateUrlParams(keyword, searchType);
     }, 100);
-  }
-
-  async function performAdvancedSearch() {
-    const query = document.getElementById('searchInput').value.trim();
-    if (!query) {
-      alert('検索クエリを入力してください');
-      return;
-    }
-
-    try {
-      const searchObj = parseAdvancedSearch(query);
-      
-      const fetchSuccess = await fetchRequiredDocuments();
-      if (!fetchSuccess) return;
-
-      if (allDocumentThreads.size === 0) {
-        updateInfoPanel('<span style="color: #c0392b;">検索対象のドキュメントがありません。</span>');
-        return;
-      }
-
-      document.getElementById('results').innerHTML = '<div class="loading">高度検索実行中...</div>';
-      
-      setTimeout(() => {
-        let searchResults = [];
-        
-        allDocumentThreads.forEach((threads, docId) => {
-          const results = executeAdvancedSearch(searchObj, threads);
-          results.forEach(result => {
-            result.documentName = docId;
-          });
-          searchResults.push(...results);
-        });
-
-        currentSearchResults = searchResults;
-        const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
-        const sortedResults = sortSearchResults(searchResults, sortOrder);
-        renderSearchResults(sortedResults, query);
-        updateUrlParams('', 'all', query);
-      }, 100);
-      
-    } catch (error) {
-      alert('高度検索クエリにエラーがあります: ' + error.message);
-    }
   }
 
   function applySorting() {
@@ -1386,7 +1205,7 @@ function escapeRegex(string) {
     document.getElementById('sortOptions').style.display = 'none';
     currentSearchResults = [];
     updateInfoPanel();
-    updateUrlParams('', 'all', '');
+    updateUrlParams('', 'all');
   }
 
   function resetFetchState() {
@@ -1397,58 +1216,52 @@ function escapeRegex(string) {
     document.getElementById('results').innerHTML = '';
     document.getElementById('searchSummary').style.display = 'none';
     document.getElementById('sortOptions').style.display = 'none';
-    renderDocumentsList(); // ドキュメント一覧表示をクリア
+    renderDocumentsList();
     const infoDiv = document.getElementById('info');
     infoDiv.innerHTML = `キャッシュをクリアしました。次の検索時にデータを再取得します。<br>準備完了。全${totalDocumentCount}件のドキュメントから検索できます。`;
   }
 
-  function updateUrlParams(keyword, searchType = 'all', advancedQuery = '') {
+  function updateUrlParams(keyword, searchType = null) {
     const url = new URL(window.location);
     
-    // パスを更新
-    if (advancedQuery) {
-      url.pathname = '/advanced/';
-    } else if (searchType === 'title') {
-      url.pathname = '/suretai/';
-    } else if (searchType === 'body') {
-      url.pathname = '/honbun/';
-    } else {
-      url.pathname = '/subete/';
-    }
-    
-    // クエリパラメータを更新
-    url.search = '';
+    // 検索キーワードの設定
     if (keyword) {
       url.searchParams.set('search', keyword);
+    } else {
+      url.searchParams.delete('search');
     }
-    if (advancedQuery) {
-      url.searchParams.set('advanced', advancedQuery);
+    
+    // 検索範囲の設定
+    if (searchType && searchType !== 'all') {
+      if (searchType === 'title') {
+        url.searchParams.set('type', 'suretai');
+      } else if (searchType === 'body') {
+        url.searchParams.set('type', 'honbun');
+      }
+    } else {
+      url.searchParams.set('type', 'subete');
     }
     
     window.history.pushState({}, '', url);
   }
 
   function checkUrlParams() {
-    const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
     const searchParam = params.get('search');
-    const advancedParam = params.get('advanced');
+    const typeParam = params.get('type');
     
-    // パスに基づいて検索タイプを設定
-    if (path.includes('/suretai/')) {
-      document.querySelector('input[name="searchType"][value="title"]').checked = true;
-    } else if (path.includes('/honbun/')) {
-      document.querySelector('input[name="searchType"][value="body"]').checked = true;
-    } else if (path.includes('/advanced/')) {
-      if (advancedParam) {
-        document.getElementById('searchInput').value = advancedParam;
-        performAdvancedSearch();
-        return;
+    // 検索範囲の設定
+    if (typeParam) {
+      if (typeParam === 'suretai') {
+        document.querySelector('input[name="searchType"][value="title"]').checked = true;
+      } else if (typeParam === 'honbun') {
+        document.querySelector('input[name="searchType"][value="body"]').checked = true;
+      } else {
+        document.querySelector('input[name="searchType"][value="all"]').checked = true;
       }
-    } else {
-      document.querySelector('input[name="searchType"][value="all"]').checked = true;
     }
     
+    // 検索実行
     if (searchParam) {
       document.getElementById('searchInput').value = searchParam;
       searchPosts();
@@ -1462,30 +1275,26 @@ function escapeRegex(string) {
     const searchType = document.querySelector('input[name="searchType"]:checked').value;
     
     const url = new URL(window.location);
-    
-    // パスを更新
-    if (keyword.startsWith('/!(){') && keyword.endsWith('}')) {
-      url.pathname = '/advanced/';
-      url.search = '';
-      url.searchParams.set('advanced', keyword);
-    } else {
+    if (keyword) {
+      url.searchParams.set('search', keyword);
       if (searchType === 'title') {
-        url.pathname = '/suretai/';
+        url.searchParams.set('type', 'suretai');
       } else if (searchType === 'body') {
-        url.pathname = '/honbun/';
+        url.searchParams.set('type', 'honbun');
       } else {
-        url.pathname = '/subete/';
+        url.searchParams.set('type', 'subete');
       }
-      url.search = '';
-      if (keyword) {
-        url.searchParams.set('search', keyword);
-      }
+    } else {
+      url.searchParams.delete('search');
+      url.searchParams.delete('type');
     }
 
     navigator.clipboard.writeText(url.toString()).then(() => {
       shareButton.textContent = 'コピー完了';
       setTimeout(() => { shareButton.textContent = originalText; }, 2000);
-    }).catch(() => { prompt('以下のURLをコピーしてください:', url.toString()); });
+    }).catch(() => { 
+      prompt('以下のURLをコピーしてください:', url.toString()); 
+    });
   }
   
   // イベントリスナーの設定
