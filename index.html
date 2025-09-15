@@ -952,7 +952,10 @@
       conditions: [],
       all: false,
       documentRange: null,
-      searchMode: 'partial'
+      searchMode: 'partial', // デフォルトを部分一致に
+      expression: null,
+      ifageTerms: [],
+      ifsageTerms: []
     };
 
     // <all>の場合
@@ -961,72 +964,9 @@
       return result;
     }
 
-    // ドキュメント範囲を解析
-    const docMatch = searchBody.match(/<document{(\d+)(?:-(\d+))?}>/);
-    if (docMatch) {
-      result.documentRange = {
-        start: parseInt(docMatch[1]),
-        end: docMatch[2] ? parseInt(docMatch[2]) : parseInt(docMatch[1])
-      };
-    }
-
-    // 検索モードを解析
-    if (searchBody.includes('<完全一致>')) {
-      result.searchMode = 'exact';
-    } else if (searchBody.includes('<半完全一致>')) {
-      result.searchMode = 'semi-exact';
-      // 文字数範囲を解析
-      const rangeMatch = searchBody.match(/<{(\d+)?-?(\d+)?}半完全一致{(\d+)?-?(\d+)?}>/);
-      if (rangeMatch) {
-        result.prefixRange = { min: rangeMatch[1] || 0, max: rangeMatch[2] || Infinity };
-        result.suffixRange = { min: rangeMatch[3] || 0, max: rangeMatch[4] || Infinity };
-      }
-    }
-
-    // 条件を解析する関数
-    function parseConditions(str) {
-      const conditions = [];
-      // 簡略化した解析（完全な実装には更に複雑な処理が必要）
-      const parts = str.split(/<(and|or|not|ifage|ifsage)>/);
-      
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (part.includes('[') && part.includes(']')) {
-          const keyword = part.match(/\[([^\]]+)\]/)?.[1];
-          if (keyword) {
-            const operator = parts[i-1] || 'and';
-            conditions.push({ keyword, operator });
-          }
-        }
-      }
-      
-      return conditions;
-    }
-
-   function parseAdvancedSearch(query) {
-    if (!query.startsWith('/!()')) return null;
-    
-    const searchBody = query.substring(4);
-    
-    // <all>の特別処理
-    if (searchBody === '{<all>}') {
-      return { type: 'all' };
-    }
-    
-    const result = {
-      type: 'advanced',
-      searchMode: 'partial', // 'partial', 'exact', 'semi-exact'
-      documentRange: null,
-      prefixRange: null,
-      suffixRange: null,
-      expression: null,
-      ifageTerms: [],
-      ifsageTerms: []
-    };
-    
     let processedBody = searchBody;
-    
-    // ドキュメント範囲を抽出
+
+    // ドキュメント範囲を解析
     const docMatch = processedBody.match(/<document{(\d+)(?:-(\d+))?}>/);
     if (docMatch) {
       result.documentRange = {
@@ -1035,40 +975,42 @@
       };
       processedBody = processedBody.replace(docMatch[0], '');
     }
-    
-    // 検索モードと範囲を抽出
+
+    // 検索モードを解析
     if (processedBody.includes('<完全一致>')) {
       result.searchMode = 'exact';
       processedBody = processedBody.replace('<完全一致>', '');
-    } else if (processedBody.includes('半完全一致')) {
+    } else if (processedBody.includes('<半完全一致>')) {
       result.searchMode = 'semi-exact';
-      const semiMatch = processedBody.match(/<({[^}]+})半完全一致({[^}]+})>/);
-      if (semiMatch) {
-        result.prefixRange = parseRange(semiMatch[1]);
-        result.suffixRange = parseRange(semiMatch[2]);
-        processedBody = processedBody.replace(semiMatch[0], '');
+      const rangeMatch = processedBody.match(/<{(\d+)?-?(\d+)?}半完全一致{(\d+)?-?(\d+)?}>/);
+      if (rangeMatch) {
+        result.prefixRange = { min: rangeMatch[1] ? parseInt(rangeMatch[1]) : 0, max: rangeMatch[2] ? parseInt(rangeMatch[2]) : Infinity };
+        result.suffixRange = { min: rangeMatch[3] ? parseInt(rangeMatch[3]) : 0, max: rangeMatch[4] ? parseInt(rangeMatch[4]) : Infinity };
+        processedBody = processedBody.replace(rangeMatch[0], '');
+      } else {
+        processedBody = processedBody.replace('<半完全一致>', '');
       }
     } else if (processedBody.includes('<部分一致>')) {
       result.searchMode = 'partial';
       processedBody = processedBody.replace('<部分一致>', '');
     }
-    
+  
     // ifage/ifsage条件を抽出
     let ifageMatch;
     while ((ifageMatch = processedBody.match(/<ifage>\[([^\]]+)\]/))) {
       result.ifageTerms.push(ifageMatch[1]);
       processedBody = processedBody.replace(ifageMatch[0], '');
     }
-    
+  
     let ifsageMatch;
     while ((ifsageMatch = processedBody.match(/<ifsage>\[([^\]]+)\]/))) {
       result.ifsageTerms.push(ifsageMatch[1]);
       processedBody = processedBody.replace(ifsageMatch[0], '');
     }
-    
+  
     // メインの検索式を解析
     result.expression = parseExpression(processedBody);
-    
+  
     return result;
   }
 
