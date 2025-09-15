@@ -1003,443 +1003,472 @@
       return conditions;
     }
 
-  } else if (processedBody.includes('<部分一致>')) {
-    result.searchMode = 'partial';
-    processedBody = processedBody.replace('<部分一致>', '');
+   function parseAdvancedSearch(query) {
+    if (!query.startsWith('/!()')) return null;
+    
+    const searchBody = query.substring(4);
+    
+    // <all>の特別処理
+    if (searchBody === '{<all>}') {
+      return { type: 'all' };
+    }
+    
+    const result = {
+      type: 'advanced',
+      searchMode: 'partial', // 'partial', 'exact', 'semi-exact'
+      documentRange: null,
+      prefixRange: null,
+      suffixRange: null,
+      expression: null,
+      ifageTerms: [],
+      ifsageTerms: []
+    };
+    
+    let processedBody = searchBody;
+    
+    // ドキュメント範囲を抽出
+    const docMatch = processedBody.match(/<document{(\d+)(?:-(\d+))?}>/);
+    if (docMatch) {
+      result.documentRange = {
+        start: parseInt(docMatch[1]),
+        end: docMatch[2] ? parseInt(docMatch[2]) : parseInt(docMatch[1])
+      };
+      processedBody = processedBody.replace(docMatch[0], '');
+    }
+    
+    // 検索モードと範囲を抽出
+    if (processedBody.includes('<完全一致>')) {
+      result.searchMode = 'exact';
+      processedBody = processedBody.replace('<完全一致>', '');
+    } else if (processedBody.includes('半完全一致')) {
+      result.searchMode = 'semi-exact';
+      const semiMatch = processedBody.match(/<({[^}]+})半完全一致({[^}]+})>/);
+      if (semiMatch) {
+        result.prefixRange = parseRange(semiMatch[1]);
+        result.suffixRange = parseRange(semiMatch[2]);
+        processedBody = processedBody.replace(semiMatch[0], '');
+      }
+    } else if (processedBody.includes('<部分一致>')) {
+      result.searchMode = 'partial';
+      processedBody = processedBody.replace('<部分一致>', '');
+    }
+    
+    // ifage/ifsage条件を抽出
+    let ifageMatch;
+    while ((ifageMatch = processedBody.match(/<ifage>\[([^\]]+)\]/))) {
+      result.ifageTerms.push(ifageMatch[1]);
+      processedBody = processedBody.replace(ifageMatch[0], '');
+    }
+    
+    let ifsageMatch;
+    while ((ifsageMatch = processedBody.match(/<ifsage>\[([^\]]+)\]/))) {
+      result.ifsageTerms.push(ifsageMatch[1]);
+      processedBody = processedBody.replace(ifsageMatch[0], '');
+    }
+    
+    // メインの検索式を解析
+    result.expression = parseExpression(processedBody);
+    
+    return result;
   }
-  
-  // ifage/ifsage条件を抽出
-  let ifageMatch;
-  while ((ifageMatch = processedBody.match(/<ifage>\[([^\]]+)\]/))) {
-    result.ifageTerms.push(ifageMatch[1]);
-    processedBody = processedBody.replace(ifageMatch[0], '');
-  }
-  
-  let ifsageMatch;
-  while ((ifsageMatch = processedBody.match(/<ifsage>\[([^\]]+)\]/))) {
-    result.ifsageTerms.push(ifsageMatch[1]);
-    processedBody = processedBody.replace(ifsageMatch[0], '');
-  }
-  
-  // メインの検索式を解析
-  result.expression = parseExpression(processedBody);
-  
-  return result;
-}
 
-// 範囲文字列を解析
-function parseRange(rangeStr) {
-  const cleanStr = rangeStr.replace(/[{}]/g, '');
-  
-  if (cleanStr === '*') {
+  // 範囲文字列を解析
+  function parseRange(rangeStr) {
+    const cleanStr = rangeStr.replace(/[{}]/g, '');
+    
+    if (cleanStr === '*') {
+      return { min: 0, max: Infinity };
+    }
+    
+    // ^で区切られた複数条件
+    if (cleanStr.includes('^')) {
+      const parts = cleanStr.split('^');
+      const ranges = parts.map(p => parseSingleRange(p));
+      return { alternatives: ranges };
+    }
+    
+    return parseSingleRange(cleanStr);
+  }
+
+  // 単一の範囲を解析
+  function parseSingleRange(str) {
+    if (str.match(/^(\d+)-(\d+)$/)) {
+      const match = str.match(/^(\d+)-(\d+)$/);
+      return { min: parseInt(match[1]), max: parseInt(match[2]) };
+    } else if (str.match(/^(\d+)-$/)) {
+      return { min: parseInt(str.match(/^(\d+)-$/)[1]), max: Infinity };
+    } else if (str.match(/^-(\d+)$/)) {
+      return { min: 0, max: parseInt(str.match(/^-(\d+)$/)[1]) };
+    } else if (str.match(/^\d+$/)) {
+      const val = parseInt(str);
+      return { min: val, max: val };
+    }
     return { min: 0, max: Infinity };
   }
-  
-  // ^で区切られた複数条件
-  if (cleanStr.includes('^')) {
-    const parts = cleanStr.split('^');
-    const ranges = parts.map(p => parseSingleRange(p));
-    return { alternatives: ranges };
-  }
-  
-  return parseSingleRange(cleanStr);
-}
 
-// 単一の範囲を解析
-function parseSingleRange(str) {
-  if (str.match(/^(\d+)-(\d+)$/)) {
-    const match = str.match(/^(\d+)-(\d+)$/);
-    return { min: parseInt(match[1]), max: parseInt(match[2]) };
-  } else if (str.match(/^(\d+)-$/)) {
-    return { min: parseInt(str.match(/^(\d+)-$/)[1]), max: Infinity };
-  } else if (str.match(/^-(\d+)$/)) {
-    return { min: 0, max: parseInt(str.match(/^-(\d+)$/)[1]) };
-  } else if (str.match(/^\d+$/)) {
-    const val = parseInt(str);
-    return { min: val, max: val };
+  // 式を解析する再帰関数
+  function parseExpression(expr) {
+    // 最外部の[]を取り除く
+    expr = expr.trim();
+    if (expr.startsWith('[') && expr.endsWith(']')) {
+      expr = expr.substring(1, expr.length - 1);
+    }
+    
+    // {[...]<operator>[...]}形式の場合
+    if (expr.startsWith('{[') || expr.includes('<')) {
+      return parseComplexExpression(expr);
+    }
+    
+    // 単純なキーワードの場合
+    return { type: 'keyword', value: expr };
   }
-  return { min: 0, max: Infinity };
-}
 
-// 式を解析する再帰関数
-function parseExpression(expr) {
-  // 最外部の[]を取り除く
-  expr = expr.trim();
-  if (expr.startsWith('[') && expr.endsWith(']')) {
-    expr = expr.substring(1, expr.length - 1);
-  }
-  
-  // {[...]<operator>[...]}形式の場合
-  if (expr.startsWith('{[') || expr.includes('<')) {
-    return parseComplexExpression(expr);
-  }
-  
-  // 単純なキーワードの場合
-  return { type: 'keyword', value: expr };
-}
-
-// 複雑な式を解析
-function parseComplexExpression(expr) {
-  // NOT演算子の処理
-  const notMatch = expr.match(/<not>\[([^\]]+)\]/);
-  if (notMatch) {
-    const remainingExpr = expr.replace(notMatch[0], '').trim();
-    const mainExpr = remainingExpr ? parseExpression(remainingExpr) : null;
-    return {
-      type: 'not',
-      expression: { type: 'keyword', value: notMatch[1] },
-      mainExpression: mainExpr
-    };
-  }
-  
-  // 演算子を探す
-  const operators = [
-    { pattern: /<and{order}{connect{space{}}}>/g, type: 'and_order_connect_space' },
-    { pattern: /<and{order}{connect{-(\d+)}}>/g, type: 'and_order_connect_limit' },
-    { pattern: /<and{order}{connect}>/g, type: 'and_order_connect' },
-    { pattern: /<and{connect{space{}}}>/g, type: 'and_connect_space' },
-    { pattern: /<and{connect{-(\d+)}}>/g, type: 'and_connect_limit' },
-    { pattern: /<and{connect}>/g, type: 'and_connect' },
-    { pattern: /<and{order}>/g, type: 'and_order' },
-    { pattern: /<and>/g, type: 'and' },
-    { pattern: /<or>/g, type: 'or' }
-  ];
-  
-  for (const op of operators) {
-    const parts = splitByOperator(expr, op.pattern);
-    if (parts.length > 1) {
-      const limit = op.type.includes('limit') ? extractLimit(expr, op.pattern) : null;
+  // 複雑な式を解析
+  function parseComplexExpression(expr) {
+    // NOT演算子の処理
+    const notMatch = expr.match(/<not>\[([^\]]+)\]/);
+    if (notMatch) {
+      const remainingExpr = expr.replace(notMatch[0], '').trim();
+      const mainExpr = remainingExpr ? parseExpression(remainingExpr) : null;
       return {
-        type: op.type,
-        limit: limit,
-        left: parseExpression(parts[0]),
-        right: parseExpression(parts.slice(1).join(op.pattern.source.replace(/[\\^$.*+?()[\]{}|]/g, '')))
+        type: 'not',
+        expression: { type: 'keyword', value: notMatch[1] },
+        mainExpression: mainExpr
       };
     }
-  }
-  
-  // 括弧を外す
-  if (expr.startsWith('{[') && expr.includes(']}')) {
-    const endIdx = findMatchingBracket(expr, 2);
-    if (endIdx > 0) {
-      const inner = expr.substring(2, endIdx);
-      const remaining = expr.substring(endIdx + 2);
-      if (remaining) {
-        return parseExpression('{[' + inner + ']}' + remaining);
-      }
-      return parseExpression(inner);
-    }
-  }
-  
-  if (expr.startsWith('[') && expr.endsWith(']')) {
-    return parseExpression(expr.substring(1, expr.length - 1));
-  }
-  
-  return { type: 'keyword', value: expr };
-}
-
-// 演算子で式を分割
-function splitByOperator(expr, pattern) {
-  const matches = [];
-  const regex = new RegExp(pattern);
-  let match;
-  let lastIndex = 0;
-  const parts = [];
-  
-  // パターンをグローバルに変換
-  const globalPattern = new RegExp(pattern.source, 'g');
-  
-  while ((match = globalPattern.exec(expr)) !== null) {
-    // 括弧の深さをチェック
-    const beforeOp = expr.substring(0, match.index);
-    if (isBalanced(beforeOp)) {
-      parts.push(expr.substring(lastIndex, match.index));
-      lastIndex = match.index + match[0].length;
-    }
-  }
-  
-  if (lastIndex < expr.length) {
-    parts.push(expr.substring(lastIndex));
-  }
-  
-  return parts.length > 1 ? parts : [expr];
-}
-
-// 括弧のバランスをチェック
-function isBalanced(str) {
-  let depth = 0;
-  for (const char of str) {
-    if (char === '[' || char === '{') depth++;
-    if (char === ']' || char === '}') depth--;
-  }
-  return depth === 0;
-}
-
-// 対応する括弧を見つける
-function findMatchingBracket(str, startIdx) {
-  let depth = 1;
-  for (let i = startIdx; i < str.length; i++) {
-    if (str[i] === '[' || str[i] === '{') depth++;
-    if (str[i] === ']' || str[i] === '}') {
-      depth--;
-      if (depth === 0) return i;
-    }
-  }
-  return -1;
-}
-
-// 制限値を抽出
-function extractLimit(expr, pattern) {
-  const match = expr.match(new RegExp(pattern.source.replace(/g$/, '')));
-  if (match && match[1]) {
-    return parseInt(match[1]);
-  }
-  return null;
-}
-
-// レスの本文を抽出（完全一致・半完全一致用）
-function extractPostBody(content) {
-  // 最後の「 <>」を削除
-  let cleanContent = content.replace(/ <>$/, '');
-  
-  // <>で分割
-  const parts = cleanContent.split('<>');
-  
-  // 最後から2番目の要素を取得（本文）
-  if (parts.length >= 2) {
-    // 最後の要素がURLやIDの場合があるので、本文となる部分を探す
-    for (let i = parts.length - 1; i >= 0; i--) {
-      const part = parts[i].trim();
-      // URLやID、数字のみでない部分を本文とする
-      if (part && !part.startsWith('http') && !part.match(/^\d+$/)) {
-        return part;
+    
+    // 演算子を探す
+    const operators = [
+      { pattern: /<and{order}{connect{space{}}}>/g, type: 'and_order_connect_space' },
+      { pattern: /<and{order}{connect{-(\d+)}}>/g, type: 'and_order_connect_limit' },
+      { pattern: /<and{order}{connect}>/g, type: 'and_order_connect' },
+      { pattern: /<and{connect{space{}}}>/g, type: 'and_connect_space' },
+      { pattern: /<and{connect{-(\d+)}}>/g, type: 'and_connect_limit' },
+      { pattern: /<and{connect}>/g, type: 'and_connect' },
+      { pattern: /<and{order}>/g, type: 'and_order' },
+      { pattern: /<and>/g, type: 'and' },
+      { pattern: /<or>/g, type: 'or' }
+    ];
+    
+    for (const op of operators) {
+      const parts = splitByOperator(expr, op.pattern);
+      if (parts.length > 1) {
+        const limit = op.type.includes('limit') ? extractLimit(expr, op.pattern) : null;
+        return {
+          type: op.type,
+          limit: limit,
+          left: parseExpression(parts[0]),
+          right: parseExpression(parts.slice(1).join(op.pattern.source.replace(/[\\^$.*+?()[\]{}|]/g, '')))
+        };
       }
     }
+    
+    // 括弧を外す
+    if (expr.startsWith('{[') && expr.includes(']}')) {
+      const endIdx = findMatchingBracket(expr, 2);
+      if (endIdx > 0) {
+        const inner = expr.substring(2, endIdx);
+        const remaining = expr.substring(endIdx + 2);
+        if (remaining) {
+          return parseExpression('{[' + inner + ']}' + remaining);
+        }
+        return parseExpression(inner);
+      }
+    }
+    
+    if (expr.startsWith('[') && expr.endsWith(']')) {
+      return parseExpression(expr.substring(1, expr.length - 1));
+    }
+    
+    return { type: 'keyword', value: expr };
   }
-  
-  return cleanContent;
-}
 
-// 高度な検索を実行する関数
-function executeAdvancedSearch(parsedQuery) {
-  // 全表示の場合
-  if (parsedQuery.type === 'all') {
-    const results = [];
-    allDocumentThreads.forEach((threads, docId) => {
-      threads.forEach(thread => {
-        results.push({
-          ...thread,
-          matchedPosts: thread.posts,
-          documentName: docId
+  // 演算子で式を分割
+  function splitByOperator(expr, pattern) {
+    const matches = [];
+    const regex = new RegExp(pattern);
+    let match;
+    let lastIndex = 0;
+    const parts = [];
+    
+    // パターンをグローバルに変換
+    const globalPattern = new RegExp(pattern.source, 'g');
+    
+    while ((match = globalPattern.exec(expr)) !== null) {
+      // 括弧の深さをチェック
+      const beforeOp = expr.substring(0, match.index);
+      if (isBalanced(beforeOp)) {
+        parts.push(expr.substring(lastIndex, match.index));
+        lastIndex = match.index + match[0].length;
+      }
+    }
+    
+    if (lastIndex < expr.length) {
+      parts.push(expr.substring(lastIndex));
+    }
+    
+    return parts.length > 1 ? parts : [expr];
+  }
+
+  // 括弧のバランスをチェック
+  function isBalanced(str) {
+    let depth = 0;
+    for (const char of str) {
+      if (char === '[' || char === '{') depth++;
+      if (char === ']' || char === '}') depth--;
+    }
+    return depth === 0;
+  }
+
+  // 対応する括弧を見つける
+  function findMatchingBracket(str, startIdx) {
+    let depth = 1;
+    for (let i = startIdx; i < str.length; i++) {
+      if (str[i] === '[' || str[i] === '{') depth++;
+      if (str[i] === ']' || str[i] === '}') {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return -1;
+  }
+
+  // 制限値を抽出
+  function extractLimit(expr, pattern) {
+    const match = expr.match(new RegExp(pattern.source.replace(/g$/, '')));
+    if (match && match[1]) {
+      return parseInt(match[1]);
+    }
+    return null;
+  }
+
+  // レスの本文を抽出（完全一致・半完全一致用）
+  function extractPostBody(content) {
+    // 最後の「 <>」を削除
+    let cleanContent = content.replace(/ <>$/, '');
+    
+    // <>で分割
+    const parts = cleanContent.split('<>');
+    
+    // 最後から2番目の要素を取得（本文）
+    if (parts.length >= 2) {
+      // 最後の要素がURLやIDの場合があるので、本文となる部分を探す
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const part = parts[i].trim();
+        // URLやID、数字のみでない部分を本文とする
+        if (part && !part.startsWith('http') && !part.match(/^\d+$/)) {
+          return part;
+        }
+      }
+    }
+    
+    return cleanContent;
+  }
+
+  // 高度な検索を実行する関数
+  function executeAdvancedSearch(parsedQuery) {
+    // 全表示の場合
+    if (parsedQuery.type === 'all') {
+      const results = [];
+      allDocumentThreads.forEach((threads, docId) => {
+        threads.forEach(thread => {
+          results.push({
+            ...thread,
+            matchedPosts: thread.posts,
+            documentName: docId
+          });
         });
       });
+      return results;
+    }
+    
+    // ドキュメント範囲でフィルタリング
+    let targetDocuments = allDocumentThreads;
+    if (parsedQuery.documentRange) {
+      targetDocuments = new Map();
+      for (let i = parsedQuery.documentRange.start; i <= parsedQuery.documentRange.end; i++) {
+        const docId = String(i);
+        if (allDocumentThreads.has(docId)) {
+          targetDocuments.set(docId, allDocumentThreads.get(docId));
+        }
+      }
+    }
+    
+    const results = [];
+    
+    // 各ドキュメントのスレッドを検索
+    targetDocuments.forEach((threads, docId) => {
+      threads.forEach(thread => {
+        const matchedPosts = [];
+        
+        thread.posts.forEach(post => {
+          let searchTarget = post.content;
+          
+          // 完全一致・半完全一致の場合は本文のみを抽出
+          if (parsedQuery.searchMode === 'exact' || parsedQuery.searchMode === 'semi-exact') {
+            searchTarget = extractPostBody(post.content);
+          }
+          
+          const matchResult = evaluateExpression(
+            parsedQuery.expression, 
+            searchTarget, 
+            post,
+            parsedQuery.searchMode,
+            parsedQuery.prefixRange,
+            parsedQuery.suffixRange
+          );
+          
+          if (matchResult) {
+            matchedPosts.push(post);
+          }
+        });
+        
+        if (matchedPosts.length > 0) {
+          // 優先度スコアを計算
+          let priorityScore = 0;
+          
+          // ifage条件のチェック
+          parsedQuery.ifageTerms.forEach(term => {
+            if (thread.posts.some(p => {
+              const target = parsedQuery.searchMode === 'partial' ? 
+                `${p.content} ${p.author} ${p.userId}` : extractPostBody(p.content);
+              return target.toLowerCase().includes(term.toLowerCase());
+            })) {
+              priorityScore += 100;
+            }
+          });
+          
+          // ifsage条件のチェック
+          parsedQuery.ifsageTerms.forEach(term => {
+            if (thread.posts.some(p => {
+              const target = parsedQuery.searchMode === 'partial' ? 
+                `${p.content} ${p.author} ${p.userId}` : extractPostBody(p.content);
+              return target.toLowerCase().includes(term.toLowerCase());
+            })) {
+              priorityScore -= 100;
+            }
+          });
+          
+          results.push({
+            ...thread,
+            matchedPosts,
+            documentName: docId,
+            priorityScore
+          });
+        }
+      });
     });
+    
+    // 優先度でソート
+    results.sort((a, b) => b.priorityScore - a.priorityScore);
+    
     return results;
   }
-  
-  // ドキュメント範囲でフィルタリング
-  let targetDocuments = allDocumentThreads;
-  if (parsedQuery.documentRange) {
-    targetDocuments = new Map();
-    for (let i = parsedQuery.documentRange.start; i <= parsedQuery.documentRange.end; i++) {
-      const docId = String(i);
-      if (allDocumentThreads.has(docId)) {
-        targetDocuments.set(docId, allDocumentThreads.get(docId));
-      }
+
+  // 式を評価
+  function evaluateExpression(expr, content, post, searchMode, prefixRange, suffixRange) {
+    if (!expr) return false;
+    
+    const contentLower = content.toLowerCase();
+    
+    switch (expr.type) {
+      case 'keyword':
+        return evaluateKeyword(expr.value, contentLower, post, searchMode, prefixRange, suffixRange);
+      
+      case 'and':
+        return evaluateExpression(expr.left, content, post, searchMode, prefixRange, suffixRange) &&
+               evaluateExpression(expr.right, content, post, searchMode, prefixRange, suffixRange);
+      
+      case 'or':
+        return evaluateExpression(expr.left, content, post, searchMode, prefixRange, suffixRange) ||
+               evaluateExpression(expr.right, content, post, searchMode, prefixRange, suffixRange);
+      
+      case 'not':
+        const mainResult = expr.mainExpression ? 
+          evaluateExpression(expr.mainExpression, content, post, searchMode, prefixRange, suffixRange) : true;
+        const notResult = evaluateExpression(expr.expression, content, post, searchMode, prefixRange, suffixRange);
+        return mainResult && !notResult;
+      
+      case 'and_order':
+        const leftMatch = findKeywordPosition(expr.left, contentLower);
+        const rightMatch = findKeywordPosition(expr.right, contentLower);
+        return leftMatch !== -1 && rightMatch !== -1 && leftMatch < rightMatch;
+      
+      case 'and_connect':
+        return evaluateConnect(expr.left, expr.right, contentLower, 0);
+      
+      case 'and_connect_limit':
+        return evaluateConnect(expr.left, expr.right, contentLower, expr.limit);
+      
+      case 'and_connect_space':
+        return evaluateConnectSpace(expr.left, expr.right, contentLower);
+      
+      case 'and_order_connect':
+        return evaluateOrderConnect(expr.left, expr.right, contentLower, 0);
+      
+      case 'and_order_connect_limit':
+        return evaluateOrderConnect(expr.left, expr.right, contentLower, expr.limit);
+      
+      case 'and_order_connect_space':
+        return evaluateOrderConnectSpace(expr.left, expr.right, contentLower);
+      
+      default:
+        return false;
     }
   }
-  
-  const results = [];
-  
-  // 各ドキュメントのスレッドを検索
-  targetDocuments.forEach((threads, docId) => {
-    threads.forEach(thread => {
-      const matchedPosts = [];
+
+  // キーワードを評価
+  function evaluateKeyword(keyword, content, post, searchMode, prefixRange, suffixRange) {
+    const keywordLower = keyword.toLowerCase();
+    
+    if (searchMode === 'exact') {
+      return content === keywordLower;
+    } else if (searchMode === 'semi-exact') {
+      const index = content.indexOf(keywordLower);
+      if (index === -1) return false;
       
-      thread.posts.forEach(post => {
-        let searchTarget = post.content;
-        
-        // 完全一致・半完全一致の場合は本文のみを抽出
-        if (parsedQuery.searchMode === 'exact' || parsedQuery.searchMode === 'semi-exact') {
-          searchTarget = extractPostBody(post.content);
-        }
-        
-        const matchResult = evaluateExpression(
-          parsedQuery.expression, 
-          searchTarget, 
-          post,
-          parsedQuery.searchMode,
-          parsedQuery.prefixRange,
-          parsedQuery.suffixRange
-        );
-        
-        if (matchResult) {
-          matchedPosts.push(post);
-        }
-      });
+      const prefixLen = index;
+      const suffixLen = content.length - index - keywordLower.length;
       
-      if (matchedPosts.length > 0) {
-        // 優先度スコアを計算
-        let priorityScore = 0;
-        
-        // ifage条件のチェック
-        parsedQuery.ifageTerms.forEach(term => {
-          if (thread.posts.some(p => {
-            const target = parsedQuery.searchMode === 'partial' ? 
-              `${p.content} ${p.author} ${p.userId}` : extractPostBody(p.content);
-            return target.toLowerCase().includes(term.toLowerCase());
-          })) {
-            priorityScore += 100;
-          }
-        });
-        
-        // ifsage条件のチェック
-        parsedQuery.ifsageTerms.forEach(term => {
-          if (thread.posts.some(p => {
-            const target = parsedQuery.searchMode === 'partial' ? 
-              `${p.content} ${p.author} ${p.userId}` : extractPostBody(p.content);
-            return target.toLowerCase().includes(term.toLowerCase());
-          })) {
-            priorityScore -= 100;
-          }
-        });
-        
-        results.push({
-          ...thread,
-          matchedPosts,
-          documentName: docId,
-          priorityScore
-        });
-      }
-    });
-  });
-  
-  // 優先度でソート
-  results.sort((a, b) => b.priorityScore - a.priorityScore);
-  
-  return results;
-}
-
-// 式を評価
-function evaluateExpression(expr, content, post, searchMode, prefixRange, suffixRange) {
-  if (!expr) return false;
-  
-  const contentLower = content.toLowerCase();
-  
-  switch (expr.type) {
-    case 'keyword':
-      return evaluateKeyword(expr.value, contentLower, post, searchMode, prefixRange, suffixRange);
-    
-    case 'and':
-      return evaluateExpression(expr.left, content, post, searchMode, prefixRange, suffixRange) &&
-             evaluateExpression(expr.right, content, post, searchMode, prefixRange, suffixRange);
-    
-    case 'or':
-      return evaluateExpression(expr.left, content, post, searchMode, prefixRange, suffixRange) ||
-             evaluateExpression(expr.right, content, post, searchMode, prefixRange, suffixRange);
-    
-    case 'not':
-      const mainResult = expr.mainExpression ? 
-        evaluateExpression(expr.mainExpression, content, post, searchMode, prefixRange, suffixRange) : true;
-      const notResult = evaluateExpression(expr.expression, content, post, searchMode, prefixRange, suffixRange);
-      return mainResult && !notResult;
-    
-    case 'and_order':
-      const leftMatch = findKeywordPosition(expr.left, contentLower);
-      const rightMatch = findKeywordPosition(expr.right, contentLower);
-      return leftMatch !== -1 && rightMatch !== -1 && leftMatch < rightMatch;
-    
-    case 'and_connect':
-      return evaluateConnect(expr.left, expr.right, contentLower, 0);
-    
-    case 'and_connect_limit':
-      return evaluateConnect(expr.left, expr.right, contentLower, expr.limit);
-    
-    case 'and_connect_space':
-      return evaluateConnectSpace(expr.left, expr.right, contentLower);
-    
-    case 'and_order_connect':
-      return evaluateOrderConnect(expr.left, expr.right, contentLower, 0);
-    
-    case 'and_order_connect_limit':
-      return evaluateOrderConnect(expr.left, expr.right, contentLower, expr.limit);
-    
-    case 'and_order_connect_space':
-      return evaluateOrderConnectSpace(expr.left, expr.right, contentLower);
-    
-    default:
-      return false;
-  }
-}
-
-// キーワードを評価
-function evaluateKeyword(keyword, content, post, searchMode, prefixRange, suffixRange) {
-  const keywordLower = keyword.toLowerCase();
-  
-  if (searchMode === 'exact') {
-    return content === keywordLower;
-  } else if (searchMode === 'semi-exact') {
-    const index = content.indexOf(keywordLower);
-    if (index === -1) return false;
-    
-    const prefixLen = index;
-    const suffixLen = content.length - index - keywordLower.length;
-    
-    return checkRange(prefixLen, prefixRange) && checkRange(suffixLen, suffixRange);
-  } else {
-    // 部分一致の場合は本文、著者名、IDすべてを検索
-    return content.includes(keywordLower) ||
-           post.author.toLowerCase().includes(keywordLower) ||
-           post.userId.toLowerCase().includes(keywordLower.replace(/\s/g, ''));
-  }
-}
-
-// 範囲をチェック
-function checkRange(value, range) {
-  if (!range) return true;
-  
-  if (range.alternatives) {
-    return range.alternatives.some(r => value >= r.min && value <= r.max);
-  }
-  
-  return value >= range.min && value <= range.max;
-}
-
-// キーワードの位置を検索
-function findKeywordPosition(expr, content) {
-  if (expr.type === 'keyword') {
-    return content.indexOf(expr.value.toLowerCase());
-  }
-  return -1;
-}
-
-// 接続条件を評価
-function evaluateConnect(leftExpr, rightExpr, content, maxGap) {
-  const leftKeyword = getKeywordValue(leftExpr).toLowerCase();
-  const rightKeyword = getKeywordValue(rightExpr).toLowerCase();
-  
-  // 左側のORまたは通常のキーワード評価
-  const leftPositions = findAllPositions(content, leftKeyword);
-  const rightPositions = findAllPositions(content, rightKeyword);
-  
-  for (const leftPos of leftPositions) {
-    for (const rightPos of rightPositions) {
-      if (rightPos > leftPos) {
-        const gap = rightPos - (leftPos + leftKeyword.length);
-        if (gap >= 0 && gap <= maxGap) {
-          return true;
-        }
-      }
+      return checkRange(prefixLen, prefixRange) && checkRange(suffixLen, suffixRange);
+    } else {
+      // 部分一致の場合は本文、著者名、IDすべてを検索
+      return content.includes(keywordLower) ||
+             post.author.toLowerCase().includes(keywordLower) ||
+             post.userId.toLowerCase().includes(keywordLower.replace(/\s/g, ''));
     }
   }
-  
-  // rightExprがOR条件の場合の特別処理
-  if (rightExpr.type === 'or') {
-    const altRightKeyword = getKeywordValue(rightExpr.right).toLowerCase();
-    const altRightPositions = findAllPositions(content, altRightKeyword);
+
+  // 範囲をチェック
+  function checkRange(value, range) {
+    if (!range) return true;
+    
+    if (range.alternatives) {
+      return range.alternatives.some(r => value >= r.min && value <= r.max);
+    }
+    
+    return value >= range.min && value <= range.max;
+  }
+
+  // キーワードの位置を検索
+  function findKeywordPosition(expr, content) {
+    if (expr.type === 'keyword') {
+      return content.indexOf(expr.value.toLowerCase());
+    }
+    return -1;
+  }
+
+  // 接続条件を評価
+  function evaluateConnect(leftExpr, rightExpr, content, maxGap) {
+    const leftKeyword = getKeywordValue(leftExpr).toLowerCase();
+    const rightKeyword = getKeywordValue(rightExpr).toLowerCase();
+    
+    // 左側のORまたは通常のキーワード評価
+    const leftPositions = findAllPositions(content, leftKeyword);
+    const rightPositions = findAllPositions(content, rightKeyword);
     
     for (const leftPos of leftPositions) {
-      for (const rightPos of altRightPositions) {
+      for (const rightPos of rightPositions) {
         if (rightPos > leftPos) {
           const gap = rightPos - (leftPos + leftKeyword.length);
           if (gap >= 0 && gap <= maxGap) {
@@ -1448,62 +1477,78 @@ function evaluateConnect(leftExpr, rightExpr, content, maxGap) {
         }
       }
     }
+    
+    // rightExprがOR条件の場合の特別処理
+    if (rightExpr.type === 'or') {
+      const altRightKeyword = getKeywordValue(rightExpr.right).toLowerCase();
+      const altRightPositions = findAllPositions(content, altRightKeyword);
+      
+      for (const leftPos of leftPositions) {
+        for (const rightPos of altRightPositions) {
+          if (rightPos > leftPos) {
+            const gap = rightPos - (leftPos + leftKeyword.length);
+            if (gap >= 0 && gap <= maxGap) {
+              return true;
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
   }
-  
-  return false;
-}
 
-// スペース接続を評価
-function evaluateConnectSpace(leftExpr, rightExpr, content) {
-  const leftKeyword = getKeywordValue(leftExpr).toLowerCase();
-  const rightKeyword = getKeywordValue(rightExpr).toLowerCase();
-  
-  // スペースで接続されているかチェック
-  const spacePattern = new RegExp(
-    escapeRegex(leftKeyword) + '[ 　]+' + escapeRegex(rightKeyword),
-    'i'
-  );
-  
-  return spacePattern.test(content);
-}
-
-// 順序付き接続を評価
-function evaluateOrderConnect(leftExpr, rightExpr, content, maxGap) {
-  return evaluateConnect(leftExpr, rightExpr, content, maxGap);
-}
-
-// 順序付きスペース接続を評価
-function evaluateOrderConnectSpace(leftExpr, rightExpr, content) {
-  return evaluateConnectSpace(leftExpr, rightExpr, content);
-}
-
-// キーワード値を取得
-function getKeywordValue(expr) {
-  if (expr.type === 'keyword') {
-    return expr.value;
+  // スペース接続を評価
+  function evaluateConnectSpace(leftExpr, rightExpr, content) {
+    const leftKeyword = getKeywordValue(leftExpr).toLowerCase();
+    const rightKeyword = getKeywordValue(rightExpr).toLowerCase();
+    
+    // スペースで接続されているかチェック
+    const spacePattern = new RegExp(
+      escapeRegex(leftKeyword) + '[ 　]+' + escapeRegex(rightKeyword),
+      'i'
+    );
+    
+    return spacePattern.test(content);
   }
-  // OR条件の場合は左側を返す
-  if (expr.type === 'or') {
-    return getKeywordValue(expr.left);
-  }
-  return '';
-}
 
-// 文字列内のすべての位置を検索
-function findAllPositions(str, keyword) {
-  const positions = [];
-  let index = str.indexOf(keyword);
-  while (index !== -1) {
-    positions.push(index);
-    index = str.indexOf(keyword, index + 1);
+  // 順序付き接続を評価
+  function evaluateOrderConnect(leftExpr, rightExpr, content, maxGap) {
+    return evaluateConnect(leftExpr, rightExpr, content, maxGap);
   }
-  return positions;
-}
 
-// 正規表現エスケープ
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+  // 順序付きスペース接続を評価
+  function evaluateOrderConnectSpace(leftExpr, rightExpr, content) {
+    return evaluateConnectSpace(leftExpr, rightExpr, content);
+  }
+
+  // キーワード値を取得
+  function getKeywordValue(expr) {
+    if (expr.type === 'keyword') {
+      return expr.value;
+    }
+    // OR条件の場合は左側を返す
+    if (expr.type === 'or') {
+      return getKeywordValue(expr.left);
+    }
+    return '';
+  }
+
+  // 文字列内のすべての位置を検索
+  function findAllPositions(str, keyword) {
+    const positions = [];
+    let index = str.indexOf(keyword);
+    while (index !== -1) {
+      positions.push(index);
+      index = str.indexOf(keyword, index + 1);
+    }
+    return positions;
+  }
+
+  // 正規表現エスケープ
+  function escapeRegex(str) {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
   
   async function searchPosts() {
     const keyword = document.getElementById('searchInput').value.trim();
