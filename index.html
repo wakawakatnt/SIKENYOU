@@ -1559,6 +1559,64 @@ function findAllPositions(str, keyword) {
 function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+  
+  async function searchPosts() {
+    const keyword = document.getElementById('searchInput').value.trim();
+    if (!keyword) {
+      clearSearch();
+      return;
+    }
+
+    const fetchSuccess = await fetchRequiredDocuments();
+    if (!fetchSuccess) return;
+
+    if (allDocumentThreads.size === 0) {
+      updateInfoPanel('<span style="color: #c0392b;">検索対象のドキュメントがありません。</span>');
+      return;
+    }
+
+    document.getElementById('results').innerHTML = '<div class="loading">検索中...</div>';
+    
+    setTimeout(() => {
+      let searchResults = [];
+      const searchType = document.querySelector('input[name="searchType"]:checked').value;
+      
+      // 高度な検索の場合
+      const advancedQuery = parseAdvancedSearch(keyword);
+      if (advancedQuery) {
+        searchResults = executeAdvancedSearch(advancedQuery);
+      } else {
+        // 通常の検索
+        allDocumentThreads.forEach((threads, docId) => {
+          searchResults.push(...searchInThreads(threads, keyword, docId, searchType));
+        });
+      }
+
+      currentSearchResults = searchResults;
+      const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
+      const sortedResults = sortSearchResults(searchResults, sortOrder);
+      renderSearchResults(sortedResults, keyword);
+      updateUrlParams(keyword, searchType);
+    }, 100);
+  }
+
+  function applySorting() {
+    if (currentSearchResults.length === 0) return;
+    const keyword = document.getElementById('searchInput').value.trim();
+    const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
+    const sortedResults = sortSearchResults(currentSearchResults, sortOrder);
+    renderSearchResults(sortedResults, keyword);
+  }
+  
+  function clearSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('results').innerHTML = '<p>検索ボックスにキーワードを入力して検索してください。</p>';
+    document.getElementById('searchSummary').style.display = 'none';
+    document.getElementById('sortOptions').style.display = 'none';
+    currentSearchResults = [];
+    updateInfoPanel();
+    updateUrlParams('', 'all');
+  }
 
   function resetFetchState() {
     allDocuments = [];
