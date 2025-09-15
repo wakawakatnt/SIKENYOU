@@ -1003,61 +1003,6 @@
       return conditions;
     }
 
-    // 条件部分を解析
-    const conditionMatch = searchBody.match(/\[(.+)\]/);
-    if (conditionMatch) {
-      result.conditions = parseConditions(conditionMatch[0]);
-    }
-
-    return result;
-  }
-
-  // 高度な検索を解析する関数
-function parseAdvancedSearch(query) {
-  if (!query.startsWith('/!()')) return null;
-  
-  const searchBody = query.substring(4);
-  
-  // <all>の特別処理
-  if (searchBody === '{<all>}') {
-    return { type: 'all' };
-  }
-  
-  const result = {
-    type: 'advanced',
-    searchMode: 'partial', // 'partial', 'exact', 'semi-exact'
-    documentRange: null,
-    prefixRange: null,
-    suffixRange: null,
-    expression: null,
-    ifageTerms: [],
-    ifsageTerms: []
-  };
-  
-  let processedBody = searchBody;
-  
-  // ドキュメント範囲を抽出
-  const docMatch = processedBody.match(/<document{(\d+)(?:-(\d+))?}>/);
-  if (docMatch) {
-    result.documentRange = {
-      start: parseInt(docMatch[1]),
-      end: docMatch[2] ? parseInt(docMatch[2]) : parseInt(docMatch[1])
-    };
-    processedBody = processedBody.replace(docMatch[0], '');
-  }
-  
-  // 検索モードと範囲を抽出
-  if (processedBody.includes('<完全一致>')) {
-    result.searchMode = 'exact';
-    processedBody = processedBody.replace('<完全一致>', '');
-  } else if (processedBody.includes('半完全一致')) {
-    result.searchMode = 'semi-exact';
-    const semiMatch = processedBody.match(/<({[^}]+})半完全一致({[^}]+})>/);
-    if (semiMatch) {
-      result.prefixRange = parseRange(semiMatch[1]);
-      result.suffixRange = parseRange(semiMatch[2]);
-      processedBody = processedBody.replace(semiMatch[0], '');
-    }
   } else if (processedBody.includes('<部分一致>')) {
     result.searchMode = 'partial';
     processedBody = processedBody.replace('<部分一致>', '');
