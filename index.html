@@ -74,6 +74,9 @@
   .post-buttons { display: inline-flex; gap: 5px; margin-left: 10px; }
   .post-buttons button { padding: 3px 8px; font-size: 0.75em; background-color: #6c757d; }
   .post-buttons button:hover { background-color: #5a6268; }
+  .post-buttons button:disabled { background-color: #aaa; cursor: not-allowed; opacity: 0.6; }
+  .post-buttons .copy-btn { background-color: #17a2b8; }
+  .post-buttons .copy-btn:hover { background-color: #138496; }
   
   /* レスのスタイル */
   .post { border-top: 1px dashed #ccc; padding: 12px 0; position: relative; }
@@ -559,9 +562,9 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(${escapedTerm})`, 'gi');
-  return text.replace(regex, '<span class="highlight">$1</span>');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\            const lastUpdated = data.lastUpdated ? new Date(data.lastUpdated.seconds * 1000).toLocaleString('ja-');
+    const regex = new RegExp(`(${escapedTerm})`, 'gi');
+    return text.replace(regex, '<span class="highlight">$1</span>');
   }
 
   function processAnchors(content, thread) {
@@ -639,6 +642,8 @@
             <div class="post-buttons">
               <button class="range-up" data-post-num="${targetPost.postNumber}">上100レス</button>
               <button class="range-down" data-post-num="${targetPost.postNumber}">下100レス</button>
+              <button class="copy-btn" data-post-data="**${targetPost.postNumber}: ${targetPost.author}** | 時刻: ${targetPost.postTime} | ID:${targetPost.userId}
+${cleanContent}">コピペ</button>
             </div>
           </div>
           <div class="post-content">${postContent}</div>
@@ -681,6 +686,10 @@
 
   // レス範囲表示機能
   function showPostsInRange(thread, postElement, direction, keyword, button) {
+    // 連打防止：ボタンを無効化
+    button.disabled = true;
+    button.textContent = '読込中...';
+    
     const postNumber = parseInt(postElement.querySelector('.post-meta strong').textContent.split(':')[0]);
     let startIndex, endIndex;
     
@@ -710,7 +719,13 @@
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
       postDiv.innerHTML = `
-        <div class="post-meta"><strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
+        <div class="post-meta">
+          <strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+          <div class="post-buttons">
+            <button class="copy-btn" data-post-data="**${post.postNumber}: ${post.author}** | 時刻: ${post.postTime} | ID:${post.userId}
+${cleanContent}">コピペ</button>
+          </div>
+        </div>
         <div class="post-content">${highlightedContent}</div>
       `;
       container.appendChild(postDiv);
@@ -723,6 +738,22 @@
         const threadId = postNumElement.getAttribute('data-thread-id');
         window.open(`https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`, '_blank');
       });
+
+      // コピーボタンのイベントリスナーを追加
+      const copyBtn = postDiv.querySelector('.copy-btn');
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const postData = copyBtn.getAttribute('data-post-data');
+        navigator.clipboard.writeText(postData).then(() => {
+          const originalText = copyBtn.textContent;
+          copyBtn.textContent = 'コピー完了';
+          setTimeout(() => {
+            copyBtn.textContent = originalText;
+          }, 1000);
+        }).catch(() => {
+          prompt('以下をコピーしてください:', postData);
+        });
+      });
     });
 
     if (direction === 'up') {
@@ -733,6 +764,12 @@
 
     // 安価プレビューイベントを追加
     addAnchorPreviewEvents(container);
+
+    // ボタンを元に戻す（しかし無効化は継続）
+    setTimeout(() => {
+      button.textContent = direction === 'up' ? '上100レス' : '下100レス';
+      // ボタンは無効化したまま（連打防止）
+    }, 500);
   }
 
   function showAllPosts(thread, keyword, threadDiv) {
@@ -767,7 +804,13 @@
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
       postDiv.innerHTML = `
-        <div class="post-meta"><strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
+        <div class="post-meta">
+          <strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+          <div class="post-buttons">
+            <button class="copy-btn" data-post-data="**${post.postNumber}: ${post.author}** | 時刻: ${post.postTime} | ID:${post.userId}
+${cleanContent}">コピペ</button>
+          </div>
+        </div>
         <div class="post-content">${highlightedContent}</div>
       `;
       postsContainer.appendChild(postDiv);
@@ -779,6 +822,22 @@
         const postNum = postNumElement.getAttribute('data-post-num');
         const threadId = postNumElement.getAttribute('data-thread-id');
         window.open(`https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`, '_blank');
+      });
+
+      // コピーボタンのイベントリスナーを追加
+      const copyBtn = postDiv.querySelector('.copy-btn');
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const postData = copyBtn.getAttribute('data-post-data');
+        navigator.clipboard.writeText(postData).then(() => {
+          const originalText = copyBtn.textContent;
+          copyBtn.textContent = 'コピー完了';
+          setTimeout(() => {
+            copyBtn.textContent = originalText;
+          }, 1000);
+        }).catch(() => {
+          prompt('以下をコピーしてください:', postData);
+        });
       });
     });
 
@@ -795,14 +854,36 @@
     if (upButton) {
       upButton.addEventListener('click', (e) => {
         e.stopPropagation();
-        showPostsInRange(thread, postDiv, 'up', keyword, upButton);
+        if (!upButton.disabled) {
+          showPostsInRange(thread, postDiv, 'up', keyword, upButton);
+        }
       });
     }
     
     if (downButton) {
       downButton.addEventListener('click', (e) => {
         e.stopPropagation();
-        showPostsInRange(thread, postDiv, 'down', keyword, downButton);
+        if (!downButton.disabled) {
+          showPostsInRange(thread, postDiv, 'down', keyword, downButton);
+        }
+      });
+    }
+    
+    // コピーボタンのイベントリスナー
+    const copyBtn = postDiv.querySelector('.copy-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const postData = copyBtn.getAttribute('data-post-data');
+        navigator.clipboard.writeText(postData).then(() => {
+          const originalText = copyBtn.textContent;
+          copyBtn.textContent = 'コピー完了';
+          setTimeout(() => {
+            copyBtn.textContent = originalText;
+          }, 1000);
+        }).catch(() => {
+          prompt('以下をコピーしてください:', postData);
+        });
       });
     }
     
