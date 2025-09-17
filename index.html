@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
+<meta charset="utf--8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ONJ 掲示板データ検索</title>
 <style>
@@ -80,10 +80,12 @@
   .post:first-child { border-top: none; }
   .post-meta { font-size: 0.9em; color: #555; margin-bottom: 8px; }
   .post-meta strong { color: #008000; }
-  .post-number-link { color: #1976d2; text-decoration: underline; cursor: pointer; }
-  .post-number-link:hover { text-decoration: none; }
   .post-content { white-space: pre-wrap; line-height: 1.6; background: #fafafa; padding: 10px; border-radius: 4px; word-wrap: break-word; }
   .highlight { background-color: #ffeb3b; padding: 1px 2px; border-radius: 2px; }
+  
+  /* レス番号リンクスタイル */
+  .post-number-link { color: #008000; cursor: pointer; text-decoration: underline; }
+  .post-number-link:hover { color: #006600; }
   
   /* 安価プレビュー */
   .anchor-link { color: #1976d2; text-decoration: underline; cursor: pointer; }
@@ -198,7 +200,7 @@
     <li><strong>全レス表示:</strong> 「全レス表示」ボタンでスレッド内の全ての投稿を表示できます</li>
     <li><strong>上100レス/下100レス:</strong> 各投稿の前後100レスを表示できます（上は-100〜-1、下は+1〜+100）</li>
     <li><strong>安価プレビュー:</strong> 「>>○○」にマウスを乗せると、該当する投稿をプレビュー表示します</li>
-    <li><strong>レス番号リンク:</strong> レス番号をクリックすると該当レスの掲示板リンクを開きます</li>
+    <li><strong>レス番号リンク:</strong> レス番号をクリックすると元の掲示板の該当レスに直接ジャンプできます</li>
   </ul>
   
   <h4>その他の機能</h4>
@@ -288,82 +290,96 @@
         const line = lines[lineIndex].trim();
         if (!line) continue;
 
-        // レスの開始条件をより厳密に判定
-        // 新しい名前解析：3つ目の<>まで全体を名前として扱う
-        const parts = line.split('<>');
-        if (parts.length >= 4) {
-          postNumber++;
+        // 新しい名前の解析ロジック：3つ目の<>までを名前として扱う
+        const angleBrackets = line.split('<>');
+        if (angleBrackets.length >= 3) {
+          // 最初の3つの部分を名前として結合
+          const fullAuthorName = angleBrackets.slice(0, 3).join('<>');
           
-          // 3つ目の<>までを名前として定義
-          const author = parts.slice(0, 3).join('<>');
-          const remainingParts = parts.slice(3);
-          
-          // 残りの部分から日時、ID、内容を解析
+          // 残りの部分で日時とIDを探す
+          const remainingParts = angleBrackets.slice(3);
           let dateTimeAndId = '';
           let postBodyContent = '';
           
-          if (remainingParts.length >= 1) {
-            dateTimeAndId = remainingParts[0];
-            postBodyContent = remainingParts.slice(1).join('<>');
-          }
-
-          // 日時とIDを分離
-          let postTime = '';
-          let userId = '';
-          
-          if (dateTimeAndId.includes('ID:')) {
-            const dateIdMatch = dateTimeAndId.match(/^(.+?)\s+ID:\s*(\S+)$/);
-            if (dateIdMatch) {
-              [, postTime, userId] = dateIdMatch;
-            } else {
-              // ID:のみの場合
-              const idMatch = dateTimeAndId.match(/ID:\s*(\S+)/);
-              if (idMatch) {
-                userId = idMatch[1];
-                postTime = '不明';
-              }
-            }
-          }
-
-          const parsedTime = parseDateTime(postTime);
-          if (parsedTime) lastPostTime = parsedTime;
-
-          // 1レス目の場合、スレッドタイトルを抽出
-          if (postNumber === 1 && postBodyContent) {
-            const bodyParts = postBodyContent.split('<>');
-            let titleCandidate = '';
-            
-            // 最後の有効なパートを探す（URLやIDを除く）
-            for (let j = bodyParts.length - 1; j >= 0; j--) {
-              const part = bodyParts[j].trim();
-              if (part && part.length >= 3 && 
-                  !part.startsWith('http') && 
-                  !part.includes('ID:') && 
-                  !part.match(/^\d+$/)) {
-                titleCandidate = part;
-                break;
-              }
-            }
-            
-            if (titleCandidate) {
-              threadTitle = titleCandidate;
-              // タイトル部分を除いた内容を投稿内容とする
-              const titleIndex = postBodyContent.lastIndexOf('<>' + titleCandidate);
-              if (titleIndex !== -1) {
-                postBodyContent = postBodyContent.substring(0, titleIndex).replace(/<>$/, '').trim();
-              }
+          // 日時パターンまたはIDパターンを含む部分を探す
+          for (let j = 0; j < remainingParts.length; j++) {
+            const part = remainingParts[j];
+            if (part.match(/\d{2}\/\d{2}\/\d{2}/) || part.includes('ID:')) {
+              dateTimeAndId = part;
+              postBodyContent = remainingParts.slice(j + 1).join('<>');
+              break;
             }
           }
           
-          posts.push({
-            postNumber: postNumber,
-            author: author,
-            sage: author.includes('sage'),
-            postTime: postTime || '不明',
-            postTimeDate: parsedTime,
-            userId: userId || '不明',
-            content: postBodyContent.replace(/<br>/g, '\n').trim()
-          });
+          // レスとして処理する
+          if (fullAuthorName) {
+            postNumber++;
+            
+            // 日時とIDを分離
+            let postTime = '';
+            let userId = '';
+            
+            if (dateTimeAndId.includes('ID:')) {
+              const dateIdMatch = dateTimeAndId.match(/^(.+?)\s+ID:\s*(\S+)$/);
+              if (dateIdMatch) {
+                [, postTime, userId] = dateIdMatch;
+              } else {
+                // ID:のみの場合
+                const idMatch = dateTimeAndId.match(/ID:\s*(\S+)/);
+                if (idMatch) {
+                  userId = idMatch[1];
+                  postTime = '不明';
+                }
+              }
+            } else if (dateTimeAndId.match(/\d{2}\/\d{2}\/\d{2}/)) {
+              postTime = dateTimeAndId;
+              userId = '不明';
+            }
+
+            const parsedTime = parseDateTime(postTime);
+            if (parsedTime) lastPostTime = parsedTime;
+
+            // 1レス目の場合、スレッドタイトルを抽出
+            if (postNumber === 1 && postBodyContent) {
+              const bodyParts = postBodyContent.split('<>');
+              let titleCandidate = '';
+              
+              // 最後の有効なパートを探す（URLやIDを除く）
+              for (let j = bodyParts.length - 1; j >= 0; j--) {
+                const part = bodyParts[j].trim();
+                if (part && part.length >= 3 && 
+                    !part.startsWith('http') && 
+                    !part.includes('ID:') && 
+                    !part.match(/^\d+$/)) {
+                  titleCandidate = part;
+                  break;
+                }
+              }
+              
+              if (titleCandidate) {
+                threadTitle = titleCandidate;
+                // タイトル部分を除いた内容を投稿内容とする
+                const titleIndex = postBodyContent.lastIndexOf('<>' + titleCandidate);
+                if (titleIndex !== -1) {
+                  postBodyContent = postBodyContent.substring(0, titleIndex).replace(/<>$/, '').trim();
+                }
+              }
+            }
+            
+            // sageの判定：名前の2つ目の部分が'sage'かどうか
+            const nameparts = fullAuthorName.split('<>');
+            const isSage = nameparts.length >= 2 && nameparts[1].trim().toLowerCase() === 'sage';
+            
+            posts.push({
+              postNumber: postNumber,
+              author: fullAuthorName, // 3つ目の<>までを含む完全な名前
+              sage: isSage,
+              postTime: postTime || '不明',
+              postTimeDate: parsedTime,
+              userId: userId || '不明',
+              content: postBodyContent.replace(/<br>/g, '\n').trim()
+            });
+          }
         }
       }
       
@@ -523,9 +539,13 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\  function toggleHelpPanel() {
-    const helpPanel = document.getElementById('helpPanel');
-    helpPanel.style.display = (helpPanel.style.display === 'none' || helpPanel.style.display === '') ?');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\  function renderDocumentsList() {
+    const documentsContent = document.getElementById('documentsContent');
+    const documentsCount = document.getElementById('documentsCount');
+    
+    documentsCount.textContent = `${allDocuments.length}件のドキュメント (読み込み済み)`;
+    documentsContent.innerHTML = '';
+    ');
     const regex = new RegExp(`(${escapedTerm})`, 'gi');
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
@@ -607,8 +627,10 @@
       const highlightedUserId = highlightSearchTerm(post.userId, keyword);
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
+      const postNumberElement = `<span class="post-number-link" data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}</span>`;
+      
       postDiv.innerHTML = `
-        <div class="post-meta"><strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
+        <div class="post-meta"><strong>${postNumberElement}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
         <div class="post-content">${highlightedContent}</div>
       `;
       container.appendChild(postDiv);
@@ -660,8 +682,10 @@
       const highlightedUserId = highlightSearchTerm(post.userId, keyword);
       const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
       
+      const postNumberElement = `<span class="post-number-link" data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}</span>`;
+      
       postDiv.innerHTML = `
-        <div class="post-meta"><strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
+        <div class="post-meta"><strong>${postNumberElement}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}</div>
         <div class="post-content">${highlightedContent}</div>
       `;
       postsContainer.appendChild(postDiv);
@@ -671,6 +695,20 @@
     addAnchorPreviewEvents(postsContainer);
     // レス番号リンクイベントを追加
     addPostNumberLinkEvents(postsContainer);
+  }
+
+  function addPostNumberLinkEvents(container) {
+    const postNumberLinks = container.querySelectorAll('.post-number-link');
+    postNumberLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const threadId = e.target.getAttribute('data-thread-id');
+        const postNum = e.target.getAttribute('data-post-num');
+        const url = `https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      });
+    });
   }
 
   function addAnchorPreviewEvents(container) {
@@ -696,20 +734,6 @@
           document.body.removeChild(previewElement);
           previewElement = null;
         }
-      });
-    });
-  }
-
-  function addPostNumberLinkEvents(container) {
-    const postNumberLinks = container.querySelectorAll('.post-number-link');
-    postNumberLinks.forEach(link => {
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const threadId = e.target.getAttribute('data-thread-id');
-        const postNum = e.target.getAttribute('data-post-num');
-        const url = `https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`;
-        window.open(url, '_blank', 'noopener,noreferrer');
       });
     });
   }
@@ -786,9 +810,11 @@
             const highlightedUserId = highlightSearchTerm(post.userId, keyword);
             const sageIndicator = post.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
             
+            const postNumberElement = `<span class="post-number-link" data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}</span>`;
+            
             postDiv.innerHTML = `
                 <div class="post-meta">
-                  <strong><span class="post-number-link" data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}</span>: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
+                  <strong>${postNumberElement}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
                   <div class="post-buttons">
                     <button class="range-up" data-post-num="${post.postNumber}">上100レス</button>
                     <button class="range-down" data-post-num="${post.postNumber}">下100レス</button>
@@ -937,22 +963,27 @@
   }
 
   function updateUrlParams(keyword) {
-    const url = new URL(window.location);
     const searchType = document.querySelector('input[name="searchType"]:checked').value;
+    const url = new URL(window.location);
     
-    // 検索範囲に応じてURLパラメータを設定
+    // 検索範囲をURLに反映
     url.searchParams.delete('suretai');
     url.searchParams.delete('honbun');
     url.searchParams.delete('subete');
     
+    if (searchType === 'title') {
+      url.searchParams.set('suretai', '');
+    } else if (searchType === 'body') {
+      url.searchParams.set('honbun', '');
+    } else if (searchType === 'all') {
+      url.searchParams.set('subete', '');
+    }
+    
+    // 検索キーワードをURLに反映
     if (keyword) {
-      if (searchType === 'title') {
-        url.searchParams.set('suretai', keyword);
-      } else if (searchType === 'body') {
-        url.searchParams.set('honbun', keyword);
-      } else {
-        url.searchParams.set('subete', keyword);
-      }
+      url.searchParams.set('search', keyword);
+    } else {
+      url.searchParams.delete('search');
     }
     
     window.history.pushState({}, '', url);
@@ -960,23 +991,20 @@
 
   function checkUrlParams() {
     const urlParams = new URLSearchParams(window.location.search);
-    let searchParam = null;
-    let searchType = 'all';
+    const searchParam = urlParams.get('search');
     
+    // 検索範囲の設定
     if (urlParams.has('suretai')) {
-      searchParam = urlParams.get('suretai');
-      searchType = 'title';
+      document.querySelector('input[name="searchType"][value="title"]').checked = true;
     } else if (urlParams.has('honbun')) {
-      searchParam = urlParams.get('honbun');
-      searchType = 'body';
+      document.querySelector('input[name="searchType"][value="body"]').checked = true;
     } else if (urlParams.has('subete')) {
-      searchParam = urlParams.get('subete');
-      searchType = 'all';
+      document.querySelector('input[name="searchType"][value="all"]').checked = true;
     }
     
+    // 検索キーワードの設定
     if (searchParam) {
       document.getElementById('searchInput').value = searchParam;
-      document.querySelector(`input[name="searchType"][value="${searchType}"]`).checked = true;
       searchPosts();
     }
   }
@@ -985,22 +1013,26 @@
     const shareButton = document.getElementById('shareBtn');
     const originalText = shareButton.textContent;
     const keyword = document.getElementById('searchInput').value.trim();
-    const url = new URL(window.location);
     const searchType = document.querySelector('input[name="searchType"]:checked').value;
-
-    // URLパラメータをクリア
+    const url = new URL(window.location);
+    
+    // 検索範囲をURLに反映
     url.searchParams.delete('suretai');
     url.searchParams.delete('honbun');
     url.searchParams.delete('subete');
     
+    if (searchType === 'title') {
+      url.searchParams.set('suretai', '');
+    } else if (searchType === 'body') {
+      url.searchParams.set('honbun', '');
+    } else if (searchType === 'all') {
+      url.searchParams.set('subete', '');
+    }
+    
     if (keyword) {
-      if (searchType === 'title') {
-        url.searchParams.set('suretai', keyword);
-      } else if (searchType === 'body') {
-        url.searchParams.set('honbun', keyword);
-      } else {
-        url.searchParams.set('subete', keyword);
-      }
+      url.searchParams.set('search', keyword);
+    } else {
+      url.searchParams.delete('search');
     }
 
     navigator.clipboard.writeText(url.toString()).then(() => {
