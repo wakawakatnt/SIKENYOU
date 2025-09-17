@@ -559,9 +559,9 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\            const lastUpdated = data.lastUpdated ? new Date(data.lastUpdated.seconds * 1000).toLocaleString('ja-');
-    const regex = new RegExp(`(${escapedTerm})`, 'gi');
-    return text.replace(regex, '<span class="highlight">$1</span>');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedTerm})`, 'gi');
+  return text.replace(regex, '<span class="highlight">$1</span>');
   }
 
   function processAnchors(content, thread) {
