@@ -523,10 +523,8 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\  function toggleHelpPanel() {
-    const helpPanel = document.getElementById('helpPanel');
-    helpPanel.style.display = (helpPanel.style.display === 'none' || helpPanel.style.display === '') ?');
-    const regex = new RegExp(`(${escapedTerm})`, 'gi');
+      const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedTerm})`, 'gi');
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
 
