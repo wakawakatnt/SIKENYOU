@@ -77,6 +77,8 @@
   .post-buttons button:disabled { background-color: #aaa; cursor: not-allowed; opacity: 0.6; }
   .post-buttons .copy-btn { background-color: #17a2b8; }
   .post-buttons .copy-btn:hover { background-color: #138496; }
+  .post-buttons .copy-with-title-btn { background-color: #28a745; }
+  .post-buttons .copy-with-title-btn:hover { background-color: #218838; }
   
   /* レスのスタイル */
   .post { border-top: 1px dashed #ccc; padding: 12px 0; position: relative; }
@@ -636,7 +638,7 @@
         const postContent = processAnchors(cleanContent, thread);
         const sageIndicator = targetPost.sage ? ' <span style="color: #888; font-size: 0.9em;">[sage]</span>' : '';
         
-        postDiv.innerHTML = `
+                    postDiv.innerHTML = `
           <div class="post-meta">
             <strong data-thread-id="${thread.id}" data-post-num="${targetPost.postNumber}">${targetPost.postNumber}: ${targetPost.author}</strong>${sageIndicator} | 時刻: ${targetPost.postTime} | ID:${targetPost.userId}
             <div class="post-buttons">
@@ -644,6 +646,8 @@
               <button class="range-down" data-post-num="${targetPost.postNumber}">下100レス</button>
               <button class="copy-btn" data-post-data="${targetPost.postNumber}: ${targetPost.author} | 時刻: ${targetPost.postTime} | ID:${targetPost.userId}
 ${cleanContent}">コピペ</button>
+              <button class="copy-with-title-btn" data-thread-title="${thread.title}" data-post-data="${targetPost.postNumber}: ${targetPost.author} | 時刻: ${targetPost.postTime} | ID:${targetPost.userId}
+${cleanContent}">スレタイと一緒にコピー</button>
             </div>
           </div>
           <div class="post-content">${postContent}</div>
@@ -724,6 +728,8 @@ ${cleanContent}">コピペ</button>
           <div class="post-buttons">
             <button class="copy-btn" data-post-data="${post.postNumber}: ${post.author} | 時刻: ${post.postTime} | ID:${post.userId}
 ${cleanContent}">コピペ</button>
+            <button class="copy-with-title-btn" data-thread-title="${thread.title}" data-post-data="${post.postNumber}: ${post.author} | 時刻: ${post.postTime} | ID:${post.userId}
+${cleanContent}">スレタイと一緒にコピー</button>
           </div>
         </div>
         <div class="post-content">${highlightedContent}</div>
@@ -752,6 +758,44 @@ ${cleanContent}">コピペ</button>
           }, 1000);
         }).catch(() => {
           prompt('以下をコピーしてください:', postData);
+        });
+      });
+
+      // スレタイと一緒にコピーボタンのイベントリスナーを追加
+      const copyWithTitleBtn = postDiv.querySelector('.copy-with-title-btn');
+      copyWithTitleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const threadTitle = copyWithTitleBtn.getAttribute('data-thread-title');
+        const postData = copyWithTitleBtn.getAttribute('data-post-data');
+        const combinedData = `${threadTitle}
+${postData}`;
+        navigator.clipboard.writeText(combinedData).then(() => {
+          const originalText = copyWithTitleBtn.textContent;
+          copyWithTitleBtn.textContent = 'コピー完了';
+          setTimeout(() => {
+            copyWithTitleBtn.textContent = originalText;
+          }, 1000);
+        }).catch(() => {
+          prompt('以下をコピーしてください:', combinedData);
+        });
+      });
+
+      // スレタイと一緒にコピーボタンのイベントリスナーを追加
+      const copyWithTitleBtn = postDiv.querySelector('.copy-with-title-btn');
+      copyWithTitleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const threadTitle = copyWithTitleBtn.getAttribute('data-thread-title');
+        const postData = copyWithTitleBtn.getAttribute('data-post-data');
+        const combinedData = `${threadTitle}
+${postData}`;
+        navigator.clipboard.writeText(combinedData).then(() => {
+          const originalText = copyWithTitleBtn.textContent;
+          copyWithTitleBtn.textContent = 'コピー完了';
+          setTimeout(() => {
+            copyWithTitleBtn.textContent = originalText;
+          }, 1000);
+        }).catch(() => {
+          prompt('以下をコピーしてください:', combinedData);
         });
       });
     });
@@ -883,6 +927,27 @@ ${cleanContent}">コピペ</button>
           }, 1000);
         }).catch(() => {
           prompt('以下をコピーしてください:', postData);
+        });
+      });
+    }
+
+    // スレタイと一緒にコピーボタンのイベントリスナー
+    const copyWithTitleBtn = postDiv.querySelector('.copy-with-title-btn');
+    if (copyWithTitleBtn) {
+      copyWithTitleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const threadTitle = copyWithTitleBtn.getAttribute('data-thread-title');
+        const postData = copyWithTitleBtn.getAttribute('data-post-data');
+        const combinedData = `${threadTitle}
+${postData}`;
+        navigator.clipboard.writeText(combinedData).then(() => {
+          const originalText = copyWithTitleBtn.textContent;
+          copyWithTitleBtn.textContent = 'コピー完了';
+          setTimeout(() => {
+            copyWithTitleBtn.textContent = originalText;
+          }, 1000);
+        }).catch(() => {
+          prompt('以下をコピーしてください:', combinedData);
         });
       });
     }
@@ -1025,6 +1090,8 @@ ${cleanContent}">コピペ</button>
                     <button class="range-down" data-post-num="${post.postNumber}">下100レス</button>
                     <button class="copy-btn" data-post-data="${post.postNumber}: ${post.author} | 時刻: ${post.postTime} | ID:${post.userId}
 ${cleanContent}">コピペ</button>
+                    <button class="copy-with-title-btn" data-thread-title="${thread.title}" data-post-data="${post.postNumber}: ${post.author} | 時刻: ${post.postTime} | ID:${post.userId}
+${cleanContent}">スレタイと一緒にコピー</button>
                   </div>
                 </div>
                 <div class="post-content">${highlightedContent}</div>
@@ -1185,7 +1252,9 @@ ${cleanContent}">コピペ</button>
       const sortOrder = document.querySelector('input[name="sortOrder"]:checked').value;
       const sortedResults = sortSearchResults(searchResults, sortOrder);
       renderSearchResults(sortedResults, keyword);
-      updateUrlParams(keyword, searchType);
+      const searchType = document.querySelector('input[name="searchType"]:checked').value;
+      const searchMode = document.querySelector('input[name="searchMode"]:checked').value;
+      updateUrlParams(keyword, searchType, searchMode);
     }, 100);
   }
 
@@ -1204,7 +1273,7 @@ ${cleanContent}">コピペ</button>
     document.getElementById('sortOptions').style.display = 'none';
     currentSearchResults = [];
     updateInfoPanel();
-    updateUrlParams('', 'all');
+    updateUrlParams('', 'all', 'default');
   }
 
   function resetFetchState() {
@@ -1297,6 +1366,7 @@ ${cleanContent}">コピペ</button>
     const originalText = shareButton.textContent;
     const keyword = document.getElementById('searchInput').value.trim();
     const searchType = document.querySelector('input[name="searchType"]:checked').value;
+    const searchMode = document.querySelector('input[name="searchMode"]:checked').value;
     
     const url = new URL(window.location);
     if (keyword) {
@@ -1308,9 +1378,18 @@ ${cleanContent}">コピペ</button>
       } else {
         url.searchParams.set('type', 'subete');
       }
+      
+      if (searchMode === 'and') {
+        url.searchParams.set('mode', 'and');
+      } else if (searchMode === 'or') {
+        url.searchParams.set('mode', 'or');
+      } else {
+        url.searchParams.set('mode', 'tuuzyou');
+      }
     } else {
       url.searchParams.delete('search');
       url.searchParams.delete('type');
+      url.searchParams.delete('mode');
     }
 
     navigator.clipboard.writeText(url.toString()).then(() => {
