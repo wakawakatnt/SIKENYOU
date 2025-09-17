@@ -562,8 +562,8 @@
     const idSearchMatch = term.match(/^id:\s*(.*)/i);
     if (idSearchMatch) termToHighlight = idSearchMatch[1].trim().replace(/\s/g, '');
     if (!termToHighlight) return text;
-      const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`(${escapedTerm})`, 'gi');
+    const escapedTerm = termToHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\          if (!all');
+    const regex = new RegExp(`(${escapedTerm})`, 'gi');
     return text.replace(regex, '<span class="highlight">$1</span>');
   }
 
@@ -642,7 +642,7 @@
             <div class="post-buttons">
               <button class="range-up" data-post-num="${targetPost.postNumber}">上100レス</button>
               <button class="range-down" data-post-num="${targetPost.postNumber}">下100レス</button>
-              <button class="copy-btn" data-post-data="**${targetPost.postNumber}: ${targetPost.author}** | 時刻: ${targetPost.postTime} | ID:${targetPost.userId}
+              <button class="copy-btn" data-post-data="${targetPost.postNumber}: ${targetPost.author} | 時刻: ${targetPost.postTime} | ID:${targetPost.userId}
 ${cleanContent}">コピペ</button>
             </div>
           </div>
@@ -722,7 +722,7 @@ ${cleanContent}">コピペ</button>
         <div class="post-meta">
           <strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
           <div class="post-buttons">
-            <button class="copy-btn" data-post-data="**${post.postNumber}: ${post.author}** | 時刻: ${post.postTime} | ID:${post.userId}
+            <button class="copy-btn" data-post-data="${post.postNumber}: ${post.author} | 時刻: ${post.postTime} | ID:${post.userId}
 ${cleanContent}">コピペ</button>
           </div>
         </div>
@@ -807,7 +807,7 @@ ${cleanContent}">コピペ</button>
         <div class="post-meta">
           <strong data-thread-id="${thread.id}" data-post-num="${post.postNumber}">${post.postNumber}: ${highlightedAuthor}</strong>${sageIndicator} | 時刻: ${post.postTime} | ID:${highlightedUserId}
           <div class="post-buttons">
-            <button class="copy-btn" data-post-data="**${post.postNumber}: ${post.author}** | 時刻: ${post.postTime} | ID:${post.userId}
+            <button class="copy-btn" data-post-data="${post.postNumber}: ${post.author} | 時刻: ${post.postTime} | ID:${post.userId}
 ${cleanContent}">コピペ</button>
           </div>
         </div>
@@ -1023,6 +1023,8 @@ ${cleanContent}">コピペ</button>
                   <div class="post-buttons">
                     <button class="range-up" data-post-num="${post.postNumber}">上100レス</button>
                     <button class="range-down" data-post-num="${post.postNumber}">下100レス</button>
+                    <button class="copy-btn" data-post-data="${post.postNumber}: ${post.author} | 時刻: ${post.postTime} | ID:${post.userId}
+${cleanContent}">コピペ</button>
                   </div>
                 </div>
                 <div class="post-content">${highlightedContent}</div>
@@ -1218,7 +1220,7 @@ ${cleanContent}">コピペ</button>
     infoDiv.innerHTML = `キャッシュをクリアしました。次の検索時にデータを再取得します。<br>準備完了。全${totalDocumentCount}件のドキュメントから検索できます。`;
   }
 
-  function updateUrlParams(keyword, searchType = null) {
+  function updateUrlParams(keyword, searchType = null, searchMode = null) {
     const url = new URL(window.location);
     
     // 検索キーワードの設定
@@ -1239,6 +1241,19 @@ ${cleanContent}">コピペ</button>
       url.searchParams.set('type', 'subete');
     }
     
+    // 検索モードの設定
+    if (searchMode) {
+      if (searchMode === 'and') {
+        url.searchParams.set('mode', 'and');
+      } else if (searchMode === 'or') {
+        url.searchParams.set('mode', 'or');
+      } else {
+        url.searchParams.set('mode', 'tuuzyou');
+      }
+    } else {
+      url.searchParams.set('mode', 'tuuzyou');
+    }
+    
     window.history.pushState({}, '', url);
   }
 
@@ -1246,6 +1261,7 @@ ${cleanContent}">コピペ</button>
     const params = new URLSearchParams(window.location.search);
     const searchParam = params.get('search');
     const typeParam = params.get('type');
+    const modeParam = params.get('mode');
     
     // 検索範囲の設定
     if (typeParam) {
@@ -1255,6 +1271,17 @@ ${cleanContent}">コピペ</button>
         document.querySelector('input[name="searchType"][value="body"]').checked = true;
       } else {
         document.querySelector('input[name="searchType"][value="all"]').checked = true;
+      }
+    }
+    
+    // 検索モードの設定
+    if (modeParam) {
+      if (modeParam === 'and') {
+        document.querySelector('input[name="searchMode"][value="and"]').checked = true;
+      } else if (modeParam === 'or') {
+        document.querySelector('input[name="searchMode"][value="or"]').checked = true;
+      } else {
+        document.querySelector('input[name="searchMode"][value="default"]').checked = true;
       }
     }
     
