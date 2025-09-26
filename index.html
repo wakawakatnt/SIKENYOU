@@ -979,40 +979,51 @@ ${cleanContent}">コピペ</button>
   }
 
   function addAnchorPreviewEvents(container) {
-    const anchorLinks = container.querySelectorAll('.anchor-link');
-    anchorLinks.forEach(link => {
-      let previewElement = null;
+  const anchorLinks = container.querySelectorAll('.anchor-link');
+  anchorLinks.forEach(link => {
+    let previewElement = null;
+    
+    link.addEventListener('mouseenter', (e) => {
+      const postNum = e.target.getAttribute('data-post-num');
+      const threadId = e.target.getAttribute('data-thread-id');
+      previewElement = createAnchorPreview(postNum, threadId);
       
-      link.addEventListener('mouseenter', (e) => {
-        const postNum = e.target.getAttribute('data-post-num');
-        const threadId = e.target.getAttribute('data-thread-id');
-        previewElement = createAnchorPreview(postNum, threadId);
-        
-        if (previewElement) {
-          document.body.appendChild(previewElement);
-          const rect = e.target.getBoundingClientRect();
-          previewElement.style.left = Math.min(rect.left, window.innerWidth - previewElement.offsetWidth - 10) + 'px';
-          previewElement.style.top = (rect.bottom + 5) + 'px';
+      if (previewElement) {
+        document.body.appendChild(previewElement);
+        const rect = e.target.getBoundingClientRect();
+
+        // 横位置（スクロールを考慮）
+        previewElement.style.left = Math.min(
+          rect.left + window.scrollX,
+          window.innerWidth - previewElement.offsetWidth - 10
+        ) + 'px';
+
+        // 縦位置（リンクの上に表示、はみ出したら下に表示）
+        let topPos = rect.top - previewElement.offsetHeight - 5 + window.scrollY;
+        if (topPos < window.scrollY) {
+          topPos = rect.bottom + 5 + window.scrollY;
         }
-      });
-      
-      link.addEventListener('mouseleave', () => {
-        if (previewElement) {
-          document.body.removeChild(previewElement);
-          previewElement = null;
-        }
-      });
-      
-      // 安価クリックイベントを追加
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const postNum = e.target.getAttribute('data-post-num');
-        const threadId = e.target.getAttribute('data-thread-id');
-        showAnchorPost(postNum, threadId);
-      });
+        previewElement.style.top = topPos + 'px';
+      }
     });
-  }
+    
+    link.addEventListener('mouseleave', () => {
+      if (previewElement) {
+        document.body.removeChild(previewElement);
+        previewElement = null;
+      }
+    });
+    
+    // 安価クリックイベント
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const postNum = e.target.getAttribute('data-post-num');
+      const threadId = e.target.getAttribute('data-thread-id');
+      showAnchorPost(postNum, threadId);
+    });
+  });
+}
 
   // OR/AND検索のヘルパー関数
   function highlightSearchTermInPost(post, keyword) {
