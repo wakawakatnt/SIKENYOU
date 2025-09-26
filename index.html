@@ -806,7 +806,7 @@ ${cleanContent}">コピペ</button>
       postNumElement.addEventListener('click', (e) => {
         e.stopPropagation();
         const postNum = postNumElement.getAttribute('data-post-num');
-        const threadId = postNumElement.getAttribute('data-
+        const threadId = postNumElement.getAttribute('data-thread-id');
         window.open(`https://hayabusa.open2ch.net/test/read.cgi/livejupiter/${threadId}/${postNum}-`, '_blank');
       });
 
